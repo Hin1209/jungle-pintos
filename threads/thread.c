@@ -256,7 +256,30 @@ thread_unblock (struct thread *t) {
 	ASSERT (t->status == THREAD_BLOCKED);
 	list_push_back (&ready_list, &t->elem);
 	t->status = THREAD_READY;
-	intr_set_level (old_level);
+	intr_set_level(old_level);
+}
+
+void put_to_sleep_thread(int wake_up_tick)
+{
+	struct thread *t = thread_currrent();
+	t->wake_up_tick = wake_up_tick;
+	t->status = THREAD_BLOCKED;
+	struct thread *sleep_thread;
+	struct list_elem *last = list_end(&sleep_list);
+	struct list_elem *e;
+
+	for (e = list_begin(&sleep_list); e != list_end(&sleep_list); e = list_next(e))
+	{
+		sleep_thread = list_entry(e, struct thread, elem);
+		if (t->wake_up_tick < sleep_thread->wake_up_tick)
+		{
+			last = e;
+			break;
+		}
+	}
+
+	list_insert(last, &(t->elem));
+	thread_yield();
 }
 
 /* Returns the name of the running thread. */
