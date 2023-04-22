@@ -149,6 +149,20 @@ thread_tick (void) {
 	else
 		kernel_ticks++;
 
+	struct thread *tmp;
+
+	while (!list_empty(&sleep_list))
+	{
+		tmp = list_entry(list_front(&sleep_list), struct thread, elem);
+		if (tmp->wake_up_tick <= ticks)
+		{
+			list_push_back(&ready_list, &(tmp->elem));
+			list_pop_front(&sleep_list);
+		}
+		else
+			break;
+	}
+
 	/* Enforce preemption. */
 	if (++thread_ticks >= TIME_SLICE)
 		intr_yield_on_return ();
