@@ -150,7 +150,8 @@ void thread_tick(int ticks)
 		kernel_ticks++;
 	struct thread *tmp;
 
-	while (!list_empty(&sleep_list))
+	enum intr_level old_level = intr_disable();
+	if (!list_empty(&sleep_list))
 	{
 		tmp = list_entry(list_front(&sleep_list), struct thread, elem);
 		if (tmp->wake_up_tick <= ticks)
@@ -159,10 +160,8 @@ void thread_tick(int ticks)
 			tmp->status = THREAD_READY;
 			list_pop_front(&sleep_list);
 		}
-		else
-			break;
 	}
-
+	intr_set_level(old_level);
 	/* Enforce preemption. */
 	if (++thread_ticks >= TIME_SLICE)
 		intr_yield_on_return();
@@ -265,15 +264,21 @@ void put_to_sleep_thread(int wake_up_tick)
 	t->wake_up_tick = wake_up_tick;
 	struct thread *sleep_thread;
 	struct list_elem *last = list_end(&sleep_list);
-	struct list_elem *e;
 
-	for (e = list_begin(&sleep_list); e != list_end(&sleep_list); e = list_next(e))
+	if (!list_empty(&sleep_list))
 	{
-		sleep_thread = list_entry(e, struct thread, elem);
-		if (t->wake_up_tick < sleep_thread->wake_up_tick)
+		for (struct list_elem *e = list_front(&sleep_list); e != list_end(&sleep_list); e = list_next(e))
 		{
-			last = e;
-			break;
+			printf("e : %x\n");
+			printf("list end: %x\n", list_end(&sleep_list));
+			printf("\n\n\n\n");
+			printf("e->next: %x\n", e->next);
+			sleep_thread = list_entry(e, struct thread, elem);
+			if (t->wake_up_tick < sleep_thread->wake_up_tick)
+			{
+				last = e;
+				break;
+			}
 		}
 	}
 
@@ -621,23 +626,6 @@ schedule(void)
 		{
 			ASSERT(curr != next);
 			list_push_back(&destruction_req, &curr->elem);
-		}
-		else if (curr && curr->status == THREAD_BLOCKED && curr != initial_thread)
-		{
-
-			struct thread *sleep_thread;
-			struct list_elem *last = list_end(&sleep_list);
-			struct list_elem *e;
-			for (e = list_begin(&sleep_list); e != list_end(&sleep_list); e = list_next(e))
-			{
-				sleep_thread = list_entry(e, struct thread, elem);
-				if (curr->wake_up_tick < sleep_thread->wake_up_tick)
-				{
-					last = e;
-					break;
-				}
-			}
-			list_insert(last, &(curr->elem));
 		}
 		else if (curr && curr->status == THREAD_READY && curr != initial_thread)
 		{
