@@ -152,14 +152,18 @@ void thread_tick(int ticks)
 	struct thread *tmp;
 
 	enum intr_level old_level = intr_disable();
-	if (!list_empty(&sleep_list))
+	struct list_elem *e = list_begin(&sleep_list);
+	while (e != list_end(&sleep_list))
 	{
-		tmp = list_entry(list_front(&sleep_list), struct thread, elem);
+		tmp = list_entry(e, struct thread, elem);
 		if (tmp->wake_up_tick <= ticks)
 		{
-			list_push_back(&ready_list, &tmp->elem);
-			list_pop_front(&sleep_list);
-			tmp->status = THREAD_READY;
+			e = list_remove(e);
+			thread_unblock(tmp);
+		}
+		else
+		{
+			e = list_next(e);
 		}
 	}
 	intr_set_level(old_level);
@@ -261,10 +265,10 @@ void thread_unblock(struct thread *t)
 
 void put_to_sleep_thread(int wake_up_tick)
 {
+	enum intr_level old_level = intr_disable();
 	struct thread *t = thread_current();
 	t->wake_up_tick = wake_up_tick;
 	struct thread *sleep_thread;
-	enum intr_level old_level = intr_disable();
 	struct list_elem *last = list_end(&sleep_list);
 	if (!list_empty(&sleep_list))
 	{
@@ -625,10 +629,7 @@ schedule(void)
 			ASSERT(curr != next);
 			list_push_back(&destruction_req, &curr->elem);
 		}
-		else
-		{
-			list_push_back(&ready_list, &curr->elem);
-		}
+
 		/* Before switching the thread, we first save the information
 		 * of current running. */
 		thread_launch(next);
