@@ -148,6 +148,7 @@ void thread_tick(int ticks)
 #endif
 	else
 		kernel_ticks++;
+
 	struct thread *tmp;
 
 	enum intr_level old_level = intr_disable();
@@ -156,9 +157,9 @@ void thread_tick(int ticks)
 		tmp = list_entry(list_front(&sleep_list), struct thread, elem);
 		if (tmp->wake_up_tick <= ticks)
 		{
-			list_push_back(&ready_list, &(tmp->elem));
-			tmp->status = THREAD_READY;
+			list_push_back(&ready_list, &tmp->elem);
 			list_pop_front(&sleep_list);
+			tmp->status = THREAD_READY;
 		}
 	}
 	intr_set_level(old_level);
@@ -253,7 +254,7 @@ void thread_unblock(struct thread *t)
 
 	old_level = intr_disable();
 	ASSERT(t->status == THREAD_BLOCKED);
-	list_push_back(&ready_list, &(t->elem));
+	list_push_back(&ready_list, &t->elem);
 	t->status = THREAD_READY;
 	intr_set_level(old_level);
 }
@@ -263,16 +264,12 @@ void put_to_sleep_thread(int wake_up_tick)
 	struct thread *t = thread_current();
 	t->wake_up_tick = wake_up_tick;
 	struct thread *sleep_thread;
+	enum intr_level old_level = intr_disable();
 	struct list_elem *last = list_end(&sleep_list);
-
 	if (!list_empty(&sleep_list))
 	{
 		for (struct list_elem *e = list_front(&sleep_list); e != list_end(&sleep_list); e = list_next(e))
 		{
-			printf("e : %x\n");
-			printf("list end: %x\n", list_end(&sleep_list));
-			printf("\n\n\n\n");
-			printf("e->next: %x\n", e->next);
 			sleep_thread = list_entry(e, struct thread, elem);
 			if (t->wake_up_tick < sleep_thread->wake_up_tick)
 			{
@@ -282,8 +279,11 @@ void put_to_sleep_thread(int wake_up_tick)
 		}
 	}
 
-	list_insert(last, &(t->elem));
+	list_insert(last, &t->elem);
 	t->status = THREAD_BLOCKED;
+	schedule();
+
+	intr_set_level(old_level);
 }
 
 /* Returns the name of the running thread. */
@@ -405,7 +405,6 @@ idle(void *idle_started_ UNUSED)
 	struct semaphore *idle_started = idle_started_;
 	idle_thread = thread_current();
 	sema_up(idle_started);
-
 	for (;;)
 	{
 		/* Let someone else run. */
@@ -604,7 +603,6 @@ schedule(void)
 	ASSERT(is_thread(next));
 	/* Mark us as running. */
 	next->status = THREAD_RUNNING;
-
 	/* Start new time slice. */
 	thread_ticks = 0;
 
@@ -627,11 +625,10 @@ schedule(void)
 			ASSERT(curr != next);
 			list_push_back(&destruction_req, &curr->elem);
 		}
-		else if (curr && curr->status == THREAD_READY && curr != initial_thread)
+		else
 		{
-			list_push_back(&ready_list, &(curr->elem));
+			list_push_back(&ready_list, &curr->elem);
 		}
-
 		/* Before switching the thread, we first save the information
 		 * of current running. */
 		thread_launch(next);
