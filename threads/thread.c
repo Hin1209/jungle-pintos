@@ -261,26 +261,18 @@ void put_to_sleep_thread(int wake_up_tick)
 	enum intr_level old_level = intr_disable();
 	struct thread *t = thread_current();
 	t->wake_up_tick = wake_up_tick;
-	struct thread *sleep_thread;
-	struct list_elem *last = list_end(&sleep_list);
-	if (!list_empty(&sleep_list))
-	{
-		for (struct list_elem *e = list_front(&sleep_list); e != list_end(&sleep_list); e = list_next(e))
-		{
-			sleep_thread = list_entry(e, struct thread, elem);
-			if (t->wake_up_tick < sleep_thread->wake_up_tick)
-			{
-				last = e;
-				break;
-			}
-		}
-	}
-
-	list_insert(last, &t->elem);
+	list_insert_ordered(&sleep_list, &t->elem, less_sleep, NULL);
 	t->status = THREAD_BLOCKED;
 	schedule();
 
 	intr_set_level(old_level);
+}
+
+bool less_sleep(const struct list_elem *a, const struct list_elem *b, void *aux)
+{
+	struct thread *st_a = list_entry(a, struct thread, elem);
+	struct thread *st_b = list_entry(b, struct thread, elem);
+	return st_a->wake_up_tick < st_b->wake_up_tick;
 }
 
 /* Returns the name of the running thread. */
