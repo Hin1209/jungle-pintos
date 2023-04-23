@@ -66,6 +66,7 @@ sema_down (struct semaphore *sema) {
 
 	old_level = intr_disable ();
 	while (sema->value == 0) {
+		// 이 부분 FIFO 법칙에 맞게 정렬 순서 바꿔야 함.
 		list_push_back (&sema->waiters, &thread_current ()->elem);
 		thread_block ();
 	}
