@@ -128,6 +128,8 @@ tid_t thread_create(const char *name, int priority, thread_func *, void *);
 void thread_block(void);
 void thread_unblock(struct thread *);
 void put_to_sleep_thread(int wake_up_tick);
+bool less_priority(const struct list_elem *a, const struct list_elem *b, void *aux);
+bool less_sleep(const struct list_elem *a, const struct list_elem *b, void *aux);
 
 struct thread *thread_current(void);
 tid_t thread_tid(void);
