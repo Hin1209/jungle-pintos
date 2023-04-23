@@ -30,7 +30,7 @@ static struct list ready_list;
 static struct list sleep_list;
 
 /* Idle thread. */
-static struct thread *idle_thread;
+static struct thread *idle_thread = NULL;
 
 /* Initial thread, the thread running init.c:main(). */
 static struct thread *initial_thread;
@@ -251,8 +251,20 @@ void thread_unblock(struct thread *t)
 
 	old_level = intr_disable();
 	ASSERT(t->status == THREAD_BLOCKED);
+
 	list_insert_ordered(&ready_list, &t->elem, compare_priority, NULL);
 	t->status = THREAD_READY;
+
+	if (!list_empty(&ready_list) && idle_thread != NULL)
+	{
+		struct thread *next = list_entry(list_begin(&ready_list), struct thread, elem);
+		if (thread_get_priority() < next->priority)
+		{
+			thread_current()->status = THREAD_READY;
+			schedule();
+		}
+	}
+
 	intr_set_level(old_level);
 }
 
@@ -301,7 +313,7 @@ thread_current(void)
 	return t;
 }
 
-bool less_priority(const struct list_elem *a, const struct list_elem *b, void *aux)
+bool compare_priority(const struct list_elem *a, const struct list_elem *b, void *aux)
 {
 	struct thread *st_a = list_entry(a, struct thread, elem);
 	struct thread *st_b = list_entry(b, struct thread, elem);
@@ -342,7 +354,7 @@ void thread_yield(void)
 
 	old_level = intr_disable();
 	if (curr != idle_thread)
-		list_insert_ordered(&ready_list, &curr->elem, less_priority, NULL);
+		list_insert_ordered(&ready_list, &curr->elem, compare_priority, NULL);
 	do_schedule(THREAD_READY);
 	intr_set_level(old_level);
 }
@@ -588,7 +600,6 @@ schedule(void)
 {
 	struct thread *curr = running_thread();
 	struct thread *next = next_thread_to_run();
-
 	ASSERT(intr_get_level() == INTR_OFF);
 	ASSERT(curr->status != THREAD_RUNNING);
 	ASSERT(is_thread(next));
@@ -616,6 +627,8 @@ schedule(void)
 			ASSERT(curr != next);
 			list_push_back(&destruction_req, &curr->elem);
 		}
+		else if (curr && curr->status == THREAD_READY)
+			list_insert_ordered(&ready_list, &curr->elem, compare_priority, NULL);
 
 		/* Before switching the thread, we first save the information
 		 * of current running. */
