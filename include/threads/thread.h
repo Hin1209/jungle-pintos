@@ -5,6 +5,7 @@
 #include <list.h>
 #include <stdint.h>
 #include "threads/interrupt.h"
+#include "threads/synch.h"
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -96,6 +97,10 @@ struct thread
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem; /* List element. */
 	int64_t wake_up_tick;
+	int init_priority;
+	struct lock *wait_lock;
+	struct list donors;
+	struct list_elem donate_elem;
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */

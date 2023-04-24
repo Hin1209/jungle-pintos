@@ -67,7 +67,6 @@ void sema_down(struct semaphore *sema)
 	old_level = intr_disable();
 	while (sema->value == 0)
 	{
-		// list_push_back (&sema->waiters, &thread_current ()->elem);
 		list_insert_ordered(&sema->waiters, &thread_current()->elem, compare_priority, NULL);
 		thread_block();
 	}
@@ -191,10 +190,31 @@ void lock_acquire(struct lock *lock)
 	ASSERT(!intr_context());
 	ASSERT(!lock_held_by_current_thread(lock));
 
+	enum intr_level old_level = intr_disable();
+	if (lock->holder != NULL)
+	{
+		thread_current()->wait_lock = lock;
+		inherit_priority(thread_current());
+	}
+
 	sema_down(&lock->semaphore);
 	lock->holder = thread_current();
+	thread_current()->wait_lock = NULL;
+	intr_set_level(old_level);
 }
 
+void inherit_priority(struct thread *t)
+{
+	if (t->wait_lock == NULL)
+		return;
+	struct thread *next = t->wait_lock->holder;
+	if (next->priority < t->priority)
+	{
+		next->priority = t->priority;
+		list_insert_ordered(&next->donors, &t->donate_elem, compare_priority, NULL);
+		inherit_priority(next);
+	}
+}
 /* Tries to acquires LOCK and returns true if successful or false
    on failure.  The lock must not already be held by the current
    thread.
@@ -225,8 +245,36 @@ void lock_release(struct lock *lock)
 	ASSERT(lock != NULL);
 	ASSERT(lock_held_by_current_thread(lock));
 
+	enum intr_level old_level = intr_disable();
+	struct thread *curr = thread_current();
+	struct thread *tmp;
+	struct list_elem *e;
+	curr->priority = curr->init_priority;
+	if (!list_empty(&curr->donors))
+	{
+		for (e = list_front(&curr->donors); e != list_end(&curr->donors); e = list_next(e))
+		{
+			tmp = list_entry(e, struct thread, donate_elem);
+			if (tmp->wait_lock == lock)
+				list_remove(e);
+		}
+		// tmp =
+		// 	while (!list_empty(&curr->donors) && tmp != list_end(&curr->donors))
+		// {
+		// 	if (tmp->wait_lock == lock)
+		// 		tmp = list_entry(list_remove(&tmp->donate_elem), struct thread, donate_elem);
+		// }
+	}
+	if (!list_empty(&curr->donors))
+	{
+		tmp = list_entry(list_front(&curr->donors), struct thread, donate_elem);
+		curr->priority = tmp->priority;
+	}
+	inherit_priority(curr);
+
 	lock->holder = NULL;
 	sema_up(&lock->semaphore);
+	intr_set_level(old_level);
 }
 
 /* Returns true if the current thread holds LOCK, false
