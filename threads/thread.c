@@ -352,8 +352,7 @@ void thread_yield(void)
 	ASSERT(intr_get_level() == INTR_OFF);
 	ASSERT(!intr_context());
 
-	if (curr != idle_thread)
-		do_schedule(THREAD_READY);
+	do_schedule(THREAD_READY);
 
 	intr_set_level(old_level);
 }
@@ -614,24 +613,33 @@ schedule(void)
 
 	if (curr != next)
 	{
-		/* If the thread we switched from is dying, destroy its struct
-		   thread. This must happen late so that thread_exit() doesn't
-		   pull out the rug under itself.
-		   We just queuing the page free reqeust here because the page is
-		   currently used by the stack.
-		   The real destruction logic will be called at the beginning of the
-		   schedule(). */
-		if (curr && curr->status == THREAD_DYING && curr != initial_thread)
+		if (curr->priority < next->priority || curr->status != THREAD_READY)
 		{
-			ASSERT(curr != next);
-			list_push_back(&destruction_req, &curr->elem);
-		}
-		else if (curr && curr->status == THREAD_READY && curr != idle_thread)
-			list_insert_ordered(&ready_list, &curr->elem, compare_priority, NULL);
+			/* If the thread we switched from is dying, destroy its struct
+			   thread. This must happen late so that thread_exit() doesn't
+			   pull out the rug under itself.
+			   We just queuing the page free reqeust here because the page is
+			   currently used by the stack.
+			   The real destruction logic will be called at the beginning of the
+			   schedule(). */
+			if (curr && curr->status == THREAD_DYING && curr != initial_thread)
+			{
+				ASSERT(curr != next);
+				list_push_back(&destruction_req, &curr->elem);
+			}
+			else if (curr && curr->status == THREAD_READY && curr != idle_thread)
+				list_insert_ordered(&ready_list, &curr->elem, compare_priority, NULL);
 
-		/* Before switching the thread, we first save the information
-		 * of current running. */
-		thread_launch(next);
+			/* Before switching the thread, we first save the information
+			 * of current running. */
+			thread_launch(next);
+		}
+		else
+		{
+			curr->status = THREAD_RUNNING;
+			next->status = THREAD_READY;
+			list_insert_ordered(&ready_list, &next->elem, compare_priority, NULL);
+		}
 	}
 }
 
