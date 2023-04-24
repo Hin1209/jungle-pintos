@@ -619,7 +619,7 @@ schedule(void)
 
 	if (curr != next)
 	{
-		if (curr->priority < next->priority || curr->status != THREAD_READY)
+		if (curr->priority <= next->priority || curr->status != THREAD_READY)
 		{
 			/* If the thread we switched from is dying, destroy its struct
 			   thread. This must happen late so that thread_exit() doesn't
