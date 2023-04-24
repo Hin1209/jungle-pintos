@@ -134,6 +134,7 @@ void thread_start(void)
    Thus, this function runs in an external interrupt context. */
 void thread_tick(int ticks)
 {
+	enum intr_level old_level = intr_disable();
 	struct thread *t = thread_current();
 
 	/* Update statistics. */
@@ -148,7 +149,6 @@ void thread_tick(int ticks)
 
 	struct thread *tmp;
 
-	enum intr_level old_level = intr_disable();
 	struct list_elem *e = list_begin(&sleep_list);
 	while (e != list_end(&sleep_list))
 	{
@@ -156,17 +156,17 @@ void thread_tick(int ticks)
 		if (tmp->wake_up_tick <= ticks)
 		{
 			e = list_remove(e);
-			thread_unblock(tmp);
+			list_insert_ordered(&ready_list, &tmp->elem, compare_priority, NULL);
 		}
 		else
 		{
 			e = list_next(e);
 		}
 	}
-	intr_set_level(old_level);
 	/* Enforce preemption. */
 	if (++thread_ticks >= TIME_SLICE)
 		intr_yield_on_return();
+	intr_set_level(old_level);
 }
 
 /* Prints thread statistics. */
@@ -255,15 +255,8 @@ void thread_unblock(struct thread *t)
 	list_insert_ordered(&ready_list, &t->elem, compare_priority, NULL);
 	t->status = THREAD_READY;
 
-	if (!list_empty(&ready_list) && idle_thread != NULL)
-	{
-		struct thread *next = list_entry(list_begin(&ready_list), struct thread, elem);
-		if (thread_get_priority() < next->priority)
-		{
-			thread_current()->status = THREAD_READY;
-			schedule();
-		}
-	}
+	if (thread_get_priority() < t->priority)
+		thread_yield();
 
 	intr_set_level(old_level);
 }
@@ -347,15 +340,15 @@ void thread_exit(void)
    may be scheduled again immediately at the scheduler's whim. */
 void thread_yield(void)
 {
-	struct thread *curr = thread_current();
 	enum intr_level old_level;
-
+	old_level = intr_disable();
+	struct thread *curr = thread_current();
 	ASSERT(!intr_context());
 
-	old_level = intr_disable();
 	if (curr != idle_thread)
 		list_insert_ordered(&ready_list, &curr->elem, compare_priority, NULL);
-	do_schedule(THREAD_READY);
+	curr->status = THREAD_READY;
+	schedule();
 	intr_set_level(old_level);
 }
 
@@ -627,7 +620,7 @@ schedule(void)
 			ASSERT(curr != next);
 			list_push_back(&destruction_req, &curr->elem);
 		}
-		else if (curr && curr->status == THREAD_READY)
+		else if (curr && curr->status == THREAD_READY && curr != idle_thread)
 			list_insert_ordered(&ready_list, &curr->elem, compare_priority, NULL);
 
 		/* Before switching the thread, we first save the information
