@@ -157,15 +157,23 @@ void thread_tick(int ticks)
 		{
 			e = list_remove(e);
 			list_insert_ordered(&ready_list, &tmp->elem, compare_priority, NULL);
+			tmp->status = THREAD_READY;
 		}
 		else
-		{
-			e = list_next(e);
-		}
+			break;
+	}
+
+	if (!list_empty(&ready_list))
+	{
+		struct thread *comp = list_entry(list_front(&ready_list), struct thread, elem);
+		if (t->priority < comp->priority)
+			if (t != idle_thread)
+				do_schedule(THREAD_READY);
 	}
 	/* Enforce preemption. */
 	if (++thread_ticks >= TIME_SLICE)
 		intr_yield_on_return();
+	ASSERT(!intr_get_level());
 	intr_set_level(old_level);
 }
 
@@ -256,7 +264,9 @@ void thread_unblock(struct thread *t)
 	t->status = THREAD_READY;
 
 	if (thread_get_priority() < t->priority)
-		thread_yield();
+	{
+		do_schedule(THREAD_READY);
+	}
 
 	intr_set_level(old_level);
 }
@@ -267,9 +277,7 @@ void put_to_sleep_thread(int wake_up_tick)
 	struct thread *t = thread_current();
 	t->wake_up_tick = wake_up_tick;
 	list_insert_ordered(&sleep_list, &t->elem, less_sleep, NULL);
-	t->status = THREAD_BLOCKED;
-	schedule();
-
+	do_schedule(THREAD_BLOCKED);
 	intr_set_level(old_level);
 }
 
@@ -343,12 +351,12 @@ void thread_yield(void)
 	enum intr_level old_level;
 	old_level = intr_disable();
 	struct thread *curr = thread_current();
+	ASSERT(intr_get_level() == INTR_OFF);
 	ASSERT(!intr_context());
 
 	if (curr != idle_thread)
 		list_insert_ordered(&ready_list, &curr->elem, compare_priority, NULL);
-	curr->status = THREAD_READY;
-	schedule();
+	do_schedule(THREAD_READY);
 	intr_set_level(old_level);
 }
 
