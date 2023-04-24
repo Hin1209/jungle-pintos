@@ -264,9 +264,7 @@ void thread_unblock(struct thread *t)
 	t->status = THREAD_READY;
 
 	if (thread_get_priority() < t->priority)
-	{
-		do_schedule(THREAD_READY);
-	}
+		thread_yield();
 
 	intr_set_level(old_level);
 }
@@ -318,7 +316,7 @@ bool compare_priority(const struct list_elem *a, const struct list_elem *b, void
 {
 	struct thread *st_a = list_entry(a, struct thread, elem);
 	struct thread *st_b = list_entry(b, struct thread, elem);
-	return st_a->priority > st_b->priority;
+	return st_b->priority < st_a->priority;
 }
 
 /* Returns the running thread's tid. */
@@ -355,8 +353,8 @@ void thread_yield(void)
 	ASSERT(!intr_context());
 
 	if (curr != idle_thread)
-		list_insert_ordered(&ready_list, &curr->elem, compare_priority, NULL);
-	do_schedule(THREAD_READY);
+		do_schedule(THREAD_READY);
+
 	intr_set_level(old_level);
 }
 
