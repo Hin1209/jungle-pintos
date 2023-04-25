@@ -360,13 +360,20 @@ void thread_yield(void)
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void thread_set_priority(int new_priority)
 {
-	thread_current()->priority = new_priority;
+	enum intr_level old_level = intr_disable();
+	struct thread *curr = thread_current();
+	curr->init_priority = new_priority;
+	if (!list_empty(&curr->donors) && curr->priority < new_priority)
+		curr->priority = new_priority;
+	else if (list_empty(&curr->donors))
+		curr->priority = new_priority;
 	if (!list_empty(&ready_list))
 	{
 		struct thread *tmp = list_entry(list_front(&ready_list), struct thread, elem);
 		if (new_priority < tmp->priority)
 			thread_yield();
 	}
+	intr_set_level(old_level);
 }
 
 /* Returns the current thread's priority. */

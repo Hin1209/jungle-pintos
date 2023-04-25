@@ -267,12 +267,6 @@ void lock_release(struct lock *lock)
 			if (tmp->wait_lock == lock)
 				list_remove(e);
 		}
-		// tmp =
-		// 	while (!list_empty(&curr->donors) && tmp != list_end(&curr->donors))
-		// {
-		// 	if (tmp->wait_lock == lock)
-		// 		tmp = list_entry(list_remove(&tmp->donate_elem), struct thread, donate_elem);
-		// }
 	}
 	if (!list_empty(&curr->donors))
 	{
