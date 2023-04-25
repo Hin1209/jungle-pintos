@@ -171,8 +171,8 @@ void thread_tick(int ticks)
 
 	if (thread_mlfqs)
 	{
-		update_load_avg(ticks);
 		update_recent_cpu(ticks);
+		update_load_avg(ticks);
 		update_all_priority(ticks);
 	}
 
@@ -193,6 +193,8 @@ void thread_tick(int ticks)
 
 void update_load_avg(int ticks)
 {
+	if (ticks == 0)
+		return;
 	if (ticks % 100 == 0)
 	{
 		int avg_coefficient = (59 * (1 << 14)) / 60;
@@ -203,13 +205,21 @@ void update_load_avg(int ticks)
 
 void update_recent_cpu(int ticks)
 {
-	thread_current()->recent_cpu += (1 << 14);
+	if (ticks == 0)
+		return;
 	int coefficient = ((int64_t)(2 * load_avg)) * (1 << 14) / (2 * load_avg + (1 << 14));
+	if (thread_current() != idle_thread)
+	{
+		thread_current()->recent_cpu = ((int64_t)coefficient) * thread_current()->recent_cpu / (1 << 14) + (1 << 14) * thread_current()->nice;
+		thread_current()->recent_cpu += (1 << 14);
+	}
 	if (ticks % 100 == 0 && !list_empty(&thread_list))
 	{
 		for (struct list_elem *e = list_front(&thread_list); e != list_end(&thread_list); e = list_next(e))
 		{
 			struct thread *t = list_entry(e, struct thread, thread_elem);
+			if (t == thread_current())
+				continue;
 			t->recent_cpu = ((int64_t)coefficient) * t->recent_cpu / (1 << 14) + (1 << 14) * t->nice;
 		}
 	}
@@ -222,13 +232,9 @@ void update_all_priority(int ticks)
 		for (struct list_elem *e = list_front(&thread_list); e != list_end(&thread_list); e = list_next(e))
 		{
 			struct thread *t = list_entry(e, struct thread, thread_elem);
-			int round_recent_cpu = t->recent_cpu;
-			round_recent_cpu /= 4;
-			if (round_recent_cpu > 0)
-				round_recent_cpu = (round_recent_cpu + (1 << 13)) / (1 << 14);
-			else
-				round_recent_cpu = (round_recent_cpu - (1 << 13)) / (1 << 14);
-			t->priority = PRI_MAX - (t->nice * 2) - round_recent_cpu;
+			if (t == idle_thread)
+				continue;
+			t->priority = PRI_MAX - (t->nice * 2) - t->recent_cpu / (1 << 16);
 		}
 	}
 }
@@ -464,7 +470,7 @@ int thread_get_load_avg(void)
 	// 	ret = (ret + (1 << 13)) / (1 << 14);
 	// else if (ret < 0)
 	// 	ret = (ret - (1 << 13)) / (1 << 14);
-	return ret / (1<<14);
+	return ret / (1 << 14);
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
