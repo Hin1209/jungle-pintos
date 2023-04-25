@@ -202,13 +202,15 @@ void lock_acquire(struct lock *lock)
 
 	enum intr_level old_level = intr_disable();
 	struct thread *curr = thread_current();
-	if (lock->holder != NULL)
+	if (!thread_mlfqs)
 	{
-		curr->wait_lock = lock;
-		inherit_priority(curr);
-		list_insert_ordered(&lock->holder->donors, &curr->donate_elem, compare_donate_priority, NULL);
+		if (lock->holder != NULL)
+		{
+			curr->wait_lock = lock;
+			inherit_priority(curr);
+			list_insert_ordered(&lock->holder->donors, &curr->donate_elem, compare_donate_priority, NULL);
+		}
 	}
-
 	sema_down(&lock->semaphore);
 	lock->holder = curr;
 	curr->wait_lock = NULL;
@@ -261,22 +263,26 @@ void lock_release(struct lock *lock)
 	struct thread *curr = thread_current();
 	struct thread *tmp;
 	struct list_elem *e;
-	curr->priority = curr->init_priority;
-	if (!list_empty(&curr->donors))
+
+	if (!thread_mlfqs)
 	{
-		for (e = list_front(&curr->donors); e != list_end(&curr->donors); e = list_next(e))
+		curr->priority = curr->init_priority;
+		if (!list_empty(&curr->donors))
 		{
-			tmp = list_entry(e, struct thread, donate_elem);
-			if (tmp->wait_lock == lock)
-				list_remove(e);
+			for (e = list_front(&curr->donors); e != list_end(&curr->donors); e = list_next(e))
+			{
+				tmp = list_entry(e, struct thread, donate_elem);
+				if (tmp->wait_lock == lock)
+					list_remove(e);
+			}
 		}
+		if (!list_empty(&curr->donors))
+		{
+			tmp = list_entry(list_front(&curr->donors), struct thread, donate_elem);
+			curr->priority = tmp->priority;
+		}
+		inherit_priority(curr);
 	}
-	if (!list_empty(&curr->donors))
-	{
-		tmp = list_entry(list_front(&curr->donors), struct thread, donate_elem);
-		curr->priority = tmp->priority;
-	}
-	inherit_priority(curr);
 
 	lock->holder = NULL;
 	sema_up(&lock->semaphore);

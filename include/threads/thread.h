@@ -96,11 +96,14 @@ struct thread
 
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem; /* List element. */
-	int64_t wake_up_tick;
+	int wake_up_tick;
 	int init_priority;
 	struct lock *wait_lock;
 	struct list donors;
 	struct list_elem donate_elem;
+	struct list_elem thread_elem;
+	int nice;
+	int recent_cpu;
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
@@ -135,6 +138,10 @@ void thread_unblock(struct thread *);
 void put_to_sleep_thread(int wake_up_tick);
 bool compare_priority(const struct list_elem *a, const struct list_elem *b, void *aux);
 bool less_sleep(const struct list_elem *a, const struct list_elem *b, void *aux);
+
+void update_load_avg(int);
+void update_recent_cpu(int);
+void update_all_priority(int);
 
 struct thread *thread_current(void);
 tid_t thread_tid(void);
