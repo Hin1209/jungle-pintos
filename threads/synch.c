@@ -176,6 +176,13 @@ void lock_init(struct lock *lock)
 	sema_init(&lock->semaphore, 1);
 }
 
+bool compare_donate_priority(const struct list_elem *a, const struct list_elem *b, void *aux)
+{
+	struct thread *st_a = list_entry(a, struct thread, donate_elem);
+	struct thread *st_b = list_entry(b, struct thread, donate_elem);
+	return st_b->priority < st_a->priority;
+}
+
 /* Acquires LOCK, sleeping until it becomes available if
    necessary.  The lock must not already be held by the current
    thread.
@@ -191,15 +198,17 @@ void lock_acquire(struct lock *lock)
 	ASSERT(!lock_held_by_current_thread(lock));
 
 	enum intr_level old_level = intr_disable();
+	struct thread *curr = thread_current();
 	if (lock->holder != NULL)
 	{
-		thread_current()->wait_lock = lock;
-		inherit_priority(thread_current());
+		curr->wait_lock = lock;
+		inherit_priority(curr);
+		list_insert_ordered(&lock->holder->donors, &curr->donate_elem, compare_donate_priority, NULL);
 	}
 
 	sema_down(&lock->semaphore);
-	lock->holder = thread_current();
-	thread_current()->wait_lock = NULL;
+	lock->holder = curr;
+	curr->wait_lock = NULL;
 	intr_set_level(old_level);
 }
 
@@ -211,10 +220,10 @@ void inherit_priority(struct thread *t)
 	if (next->priority < t->priority)
 	{
 		next->priority = t->priority;
-		list_insert_ordered(&next->donors, &t->donate_elem, compare_priority, NULL);
 		inherit_priority(next);
 	}
 }
+
 /* Tries to acquires LOCK and returns true if successful or false
    on failure.  The lock must not already be held by the current
    thread.
