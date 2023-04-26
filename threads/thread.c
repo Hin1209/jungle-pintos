@@ -155,19 +155,6 @@ void thread_tick(int ticks)
 		kernel_ticks++;
 
 	struct thread *tmp;
-	if (thread_mlfqs)
-	{
-		increment_recent_cpu();
-		if (ticks % TIME_SLICE == 0)
-		{
-			update_all_priority();
-			if (ticks % 100 == 0)
-			{
-				update_recent_cpu();
-				update_load_avg();
-			}
-		}
-	}
 	struct list_elem *e = list_begin(&sleep_list);
 	while (e != list_end(&sleep_list))
 	{
@@ -182,6 +169,19 @@ void thread_tick(int ticks)
 			break;
 	}
 
+	if (thread_mlfqs)
+	{
+		increment_recent_cpu();
+		if (ticks % TIME_SLICE == 0)
+		{
+			update_all_priority();
+			if (ticks % 100 == 0)
+			{
+				update_recent_cpu();
+				update_load_avg();
+			}
+		}
+	}
 	if (!list_empty(&ready_list))
 	{
 		list_sort(&ready_list, compare_priority, NULL);
@@ -199,8 +199,8 @@ void thread_tick(int ticks)
 
 void update_load_avg()
 {
-	int avg_coefficient = (59 * F) / 60;
-	int ready_coefficient = (F / 60);
+	int avg_coefficient = ((int64_t)59 * F) / 60;
+	int ready_coefficient = ((int64_t)F / 60);
 	int ready_num;
 	if (thread_current() == idle_thread)
 		ready_num = list_size(&ready_list);
@@ -242,8 +242,8 @@ void update_all_priority()
 			else
 				decay = 0;
 			t->priority = PRI_MAX - (t->nice * 2) - decay;
-			if (t->priority < PRI_MIN)
-				t->priority = PRI_MIN;
+			if (t->priority <= PRI_MIN)
+				t->priority = PRI_MIN + 1;
 			else if (t->priority > PRI_MAX)
 				t->priority = PRI_MAX;
 		}
