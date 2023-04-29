@@ -188,6 +188,7 @@ int process_exec(void *f_name)
 	palloc_free_page(file_name);
 	if (!success)
 		return -1;
+	hex_dump(_if.rsp, _if.rsp, KERN_BASE - _if.rsp, true);
 
 	/* Start switched process. */
 	do_iret(&_if);
@@ -208,6 +209,10 @@ int process_wait(tid_t child_tid UNUSED)
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
+	for (;;)
+	{
+	}
+
 	return -1;
 }
 
@@ -343,9 +348,11 @@ load(const char *file_name, struct intr_frame *if_)
 	if (t->pml4 == NULL)
 		goto done;
 	process_activate(thread_current());
-
+	char *ret_ptr;
+	char *next_ptr;
+	ret_ptr = strtok_r(file_name, " ", &next_ptr);
 	/* Open executable file. */
-	file = filesys_open(file_name);
+	file = filesys_open(ret_ptr);
 	if (file == NULL)
 	{
 		printf("load: %s: open failed\n", file_name);
@@ -436,16 +443,18 @@ load(const char *file_name, struct intr_frame *if_)
 
 	while (ret_ptr)
 	{
-		size += strlen(ret_ptr);
-		sizes[idx] = strlen(ret_ptr);
+		size += (strlen(ret_ptr) + 1);
+		sizes[idx] = strlen(ret_ptr) + 1;
 		args[idx] = ret_ptr;
+		strlcat(args[idx], "\0", 1);
 		ret_ptr = strtok_r(NULL, " ", &next_ptr);
 		idx++;
 	}
 
-	while (4 * align++ <= size)
+	while (8 * align++ <= size)
 		;
 
+	uintptr_t top_arg = if_->rsp;
 	int token_size;
 	for (int i = idx - 1; i >= 0; i--)
 	{
@@ -453,21 +462,20 @@ load(const char *file_name, struct intr_frame *if_)
 		if_->rsp = (char *)if_->rsp - token_size;
 		memcpy(if_->rsp, args[i], token_size);
 	}
-	uintptr_t top_arg = if_->rsp;
-	if (4 * align > size)
+	if (8 * align > size)
 	{
-		if_->rsp = (char *)if_->rsp - (4 * align - size);
-		memset(if_->rsp, 0, 4 * align - size);
+		if_->rsp = (char *)if_->rsp - (8 * align - size);
+		memset(if_->rsp, 0, 8 * align - size);
 	}
 	if_->rsp = (char *)if_->rsp - 8;
-	unsigned int tmp;
+	unsigned int tmp = 0;
 	memset(if_->rsp, 0, 8);
 	for (int i = idx - 1; i >= 0; i--)
 	{
 		if_->rsp = (char *)if_->rsp - 8;
 		token_size = sizes[i];
-		tmp = top_arg - token_size;
-		memcpy(if_->rsp, &tmp, 8);
+		tmp = (char *)top_arg - token_size;
+		memcpy(if_->rsp, &tmp, 4);
 		top_arg = (char *)top_arg - token_size;
 	}
 	if_->rsp = (char *)if_->rsp - 8;
