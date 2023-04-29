@@ -427,6 +427,53 @@ load(const char *file_name, struct intr_frame *if_)
 
 	/* TODO: Your code goes here.
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
+	char *args[128];
+	int sizes[128];
+	int size = 0;
+	int idx = 0;
+	int align = 1;
+	char *str_align;
+
+	while (ret_ptr)
+	{
+		size += strlen(ret_ptr);
+		sizes[idx] = strlen(ret_ptr);
+		args[idx] = ret_ptr;
+		ret_ptr = strtok_r(NULL, " ", &next_ptr);
+		idx++;
+	}
+
+	while (4 * align++ <= size)
+		;
+
+	int token_size;
+	for (int i = idx - 1; i >= 0; i--)
+	{
+		token_size = sizes[i];
+		if_->rsp = (char *)if_->rsp - token_size;
+		memcpy(if_->rsp, args[i], token_size);
+	}
+	uintptr_t top_arg = if_->rsp;
+	if (4 * align > size)
+	{
+		if_->rsp = (char *)if_->rsp - (4 * align - size);
+		memset(if_->rsp, 0, 4 * align - size);
+	}
+	if_->rsp = (char *)if_->rsp - 8;
+	unsigned int tmp;
+	memset(if_->rsp, 0, 8);
+	for (int i = idx - 1; i >= 0; i--)
+	{
+		if_->rsp = (char *)if_->rsp - 8;
+		token_size = sizes[i];
+		tmp = top_arg - token_size;
+		memcpy(if_->rsp, &tmp, 8);
+		top_arg = (char *)top_arg - token_size;
+	}
+	if_->rsp = (char *)if_->rsp - 8;
+	(if_->R).rdi = idx;
+	(if_->R).rsi = (char *)if_->rsp + 8;
+	memset(if_->rsp, 0, 8);
 
 	success = true;
 
