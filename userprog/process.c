@@ -162,6 +162,7 @@ error:
  * Returns -1 on fail. */
 int
 process_exec (void *f_name) {
+	char *token, *save_ptr;
 	char *file_name = f_name;
 	bool success;
 
@@ -173,8 +174,13 @@ process_exec (void *f_name) {
 	_if.cs = SEL_UCSEG;
 	_if.eflags = FLAG_IF | FLAG_MBS;
 
+
 	/* We first kill the current context */
 	process_cleanup ();
+	
+	for (token = strtok_r (file_name, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr)) {
+		int len = strlen(token);
+	}
 
 	/* And then load the binary */
 	success = load (file_name, &_if);
@@ -323,11 +329,13 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
 static bool
 load (const char *file_name, struct intr_frame *if_) {
 	struct thread *t = thread_current ();
+	char *token, *save_ptr;
 	struct ELF ehdr;
 	struct file *file = NULL;
 	off_t file_ofs;
 	bool success = false;
 	int i;
+	int top = -1;
 
 	/* Allocate and activate page directory. */
 	t->pml4 = pml4_create ();
@@ -416,7 +424,12 @@ load (const char *file_name, struct intr_frame *if_) {
 
 	/* TODO: Your code goes here.
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
-
+	//  for (token = strtok_r (file_name, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr)) {
+	// 	int len = strlen(token);
+	// 	if_->rsp = if_->rsp - (len + 1);
+	// 	memcpy(if_->rsp, token, len + 1);
+	// }
+		
 	success = true;
 
 done:
