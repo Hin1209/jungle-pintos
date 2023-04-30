@@ -187,8 +187,7 @@ int process_exec(void *f_name)
 	int sizes[128];
 	int size = 0;
 	int idx = 0;
-	ret_ptr = strtok_r(file_name, " ", &next_ptr);
-	while (ret_ptr)
+	for (ret_ptr = strtok_r(file_name, " ", &next_ptr); ret_ptr != NULL; ret_ptr = strtok_r(NULL, " ", &next_ptr))
 	{
 		size += (strlen(ret_ptr) + 1);
 		sizes[idx] = strlen(ret_ptr) + 1;
@@ -199,13 +198,12 @@ int process_exec(void *f_name)
 	/* And then load the binary */
 	success = load(file_name, &_if);
 	argument_stack(idx, args, sizes, size, &_if);
+	hex_dump(_if.rsp, _if.rsp, USER_STACK - _if.rsp, true);
 
 	/* If load failed, quit. */
 	palloc_free_page(file_name);
 	if (!success)
 		return -1;
-	hex_dump(_if.rsp, _if.rsp, KERN_BASE - _if.rsp, true);
-
 	/* Start switched process. */
 	do_iret(&_if);
 	NOT_REACHED();
