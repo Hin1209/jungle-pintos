@@ -23,9 +23,11 @@
 #endif
 
 static void process_cleanup (void);
-static bool load (const char *file_name, struct intr_frame *if_);
+static bool load (const char *file_name, struct intr_frame *if_ ,const char *s);
 static void initd (void *f_name);
 static void __do_fork (void *);
+
+
 
 /* General process initializer for initd and other process. */
 static void
@@ -162,9 +164,11 @@ error:
  * Returns -1 on fail. */
 int
 process_exec (void *f_name) {
-	char *token, *save_ptr;
 	char *file_name = f_name;
 	bool success;
+	char* temp = malloc(strlen(file_name) + 1); // 복사할 메모리 공간 할당
+	strlcpy(temp, file_name, strlen(file_name) + 1); // 문자열 복사
+	char* save_ptr;
 
 	/* We cannot use the intr_frame in the thread structure.
 	 * This is because when current thread rescheduled,
@@ -178,12 +182,10 @@ process_exec (void *f_name) {
 	/* We first kill the current context */
 	process_cleanup ();
 	
-	for (token = strtok_r (file_name, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr)) {
-		int len = strlen(token);
-	}
+	file_name = strtok_r (file_name, " ", &save_ptr);
 
 	/* And then load the binary */
-	success = load (file_name, &_if);
+	success = load (file_name, &_if, temp);
 
 	/* If load failed, quit. */
 	palloc_free_page (file_name);
@@ -327,7 +329,7 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
  * and its initial stack pointer into *RSP.
  * Returns true if successful, false otherwise. */
 static bool
-load (const char *file_name, struct intr_frame *if_) {
+load (const char *file_name, struct intr_frame *if_, const char *s) {
 	struct thread *t = thread_current ();
 	char *token, *save_ptr;
 	struct ELF ehdr;
@@ -335,7 +337,7 @@ load (const char *file_name, struct intr_frame *if_) {
 	off_t file_ofs;
 	bool success = false;
 	int i;
-	int top = -1;
+
 
 	/* Allocate and activate page directory. */
 	t->pml4 = pml4_create ();
@@ -424,13 +426,66 @@ load (const char *file_name, struct intr_frame *if_) {
 
 	/* TODO: Your code goes here.
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
-	//  for (token = strtok_r (file_name, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr)) {
-	// 	int len = strlen(token);
-	// 	if_->rsp = if_->rsp - (len + 1);
-	// 	memcpy(if_->rsp, token, len + 1);
-	// }
+	 char *args[128];
+	 int sizes[128];
+	 int total_size = 0;
+	 int idx = 0;
+	 int align = 1;
+	 char *str_align;
+
+	 for (token = strtok_r (s, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr)) {
+		int len = strlen(token);
+		total_size += len + 1;
+		sizes[idx] = len + 1;
+		args[idx] = token;
+		idx ++;
+	}
+	uintptr_t top = if_->rsp;
+
+	while (8 * align <= total_size)
 		
+		align ++;
+	
+	int token_size;
+
+	for (int i = idx-1; i >= 0; i--)
+	{
+		token_size = sizes[i];
+		if_->rsp = (char *)if_->rsp - token_size;
+		memcpy(if_->rsp, args[i], token_size);
+
+	}
+
+	uintptr_t check = if_->rsp;
+
+	if (8 * align  > total_size)
+	{
+		if_->rsp = (char *)if_->rsp - (8*align - total_size);
+		memset(if_->rsp, 0, 8*align - total_size);
+	}
+
+	uintptr_t padingcheck = if_->rsp;
+
+	if_->rsp = (char *)if_->rsp-8;
+
+	unsigned int temp;
+	memset(if_->rsp, 0, 8);
+
+	for (int i = idx-1; i >=0; i--)
+	{
+		if_->rsp = (char *)if_->rsp-8;
+		token_size = sizes[i];
+		temp = (char *)top - token_size;
+		memcpy(if_->rsp, &temp, 8);
+		top = (char*)top - token_size;
+	}
+	if_->rsp = (char *)if_->rsp -8;
+	(if_->R).rdi = idx;
+	(if_->R).rsi = (char *)if_->rsp + 8;
+	memset(if_->rsp, 0, 8);
+
 	success = true;
+	free(s);
 
 done:
 	/* We arrive here whether the load is successful or not. */
