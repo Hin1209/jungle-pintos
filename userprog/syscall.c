@@ -10,6 +10,8 @@
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
+void halt (void);
+void exit (int status);
 
 /* System call.
  *
@@ -42,5 +44,32 @@ void
 syscall_handler (struct intr_frame *f UNUSED) {
 	// TODO: Your implementation goes here.
 	printf ("system call!\n");
+	thread_exit ();
+}
+
+/*
+* Halting the OS
+*/
+void
+halt (void) {
+	/* pintOS 종료 */
+	power_off ();
+}
+
+/*
+* Terminating this process
+*/
+void
+exit (int status) {
+	/* 실행 중인 스레드 구조체 가져오기 */
+	struct thread *cur = thread_current;
+
+	/* 프로세스 종료 메시지 출력하기  */
+
+	///////////////////////////////////
+	// status는 enum으로 정의되어있으니까 int(%d) 자료형으로 출력문 받아야 되나?
+	printf("%s: exit (%s)\n", cur->name, cur->status);
+
+	/* 스레드 종료 */
 	thread_exit ();
 }
