@@ -181,8 +181,24 @@ int process_exec(void *f_name)
 	/* We first kill the current context */
 	process_cleanup();
 
+	char *ret_ptr;
+	char *next_ptr;
+	char *args[128];
+	int sizes[128];
+	int size = 0;
+	int idx = 0;
+	ret_ptr = strtok_r(file_name, " ", &next_ptr);
+	while (ret_ptr)
+	{
+		size += (strlen(ret_ptr) + 1);
+		sizes[idx] = strlen(ret_ptr) + 1;
+		args[idx] = ret_ptr;
+		ret_ptr = strtok_r(NULL, " ", &next_ptr);
+		idx++;
+	}
 	/* And then load the binary */
 	success = load(file_name, &_if);
+	argument_stack(idx, args, sizes, size, &_if);
 
 	/* If load failed, quit. */
 	palloc_free_page(file_name);
@@ -209,7 +225,7 @@ int process_wait(tid_t child_tid UNUSED)
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
-	for (;;)
+	for (int i = 0; i < 1000000000; i++)
 	{
 	}
 
@@ -348,11 +364,9 @@ load(const char *file_name, struct intr_frame *if_)
 	if (t->pml4 == NULL)
 		goto done;
 	process_activate(thread_current());
-	char *ret_ptr;
-	char *next_ptr;
-	ret_ptr = strtok_r(file_name, " ", &next_ptr);
+
 	/* Open executable file. */
-	file = filesys_open(ret_ptr);
+	file = filesys_open(file_name);
 	if (file == NULL)
 	{
 		printf("load: %s: open failed\n", file_name);
@@ -434,22 +448,19 @@ load(const char *file_name, struct intr_frame *if_)
 
 	/* TODO: Your code goes here.
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
-	char *args[128];
-	int sizes[128];
-	int size = 0;
-	int idx = 0;
-	int align = 1;
-	char *str_align;
 
-	while (ret_ptr)
-	{
-		size += (strlen(ret_ptr) + 1);
-		sizes[idx] = strlen(ret_ptr) + 1;
-		args[idx] = ret_ptr;
-		strlcat(args[idx], "\0", 1);
-		ret_ptr = strtok_r(NULL, " ", &next_ptr);
-		idx++;
-	}
+	success = true;
+
+done:
+	/* We arrive here whether the load is successful or not. */
+	file_close(file);
+	return success;
+}
+
+void argument_stack(int idx, char **args, int *sizes, int size, struct intr_frame *if_)
+{
+
+	int align = 1;
 
 	while (8 * align++ <= size)
 		;
@@ -468,27 +479,20 @@ load(const char *file_name, struct intr_frame *if_)
 		memset(if_->rsp, 0, 8 * align - size);
 	}
 	if_->rsp = (char *)if_->rsp - 8;
-	unsigned int tmp = 0;
+	unsigned int *tmp = 0;
 	memset(if_->rsp, 0, 8);
 	for (int i = idx - 1; i >= 0; i--)
 	{
 		if_->rsp = (char *)if_->rsp - 8;
 		token_size = sizes[i];
 		tmp = (char *)top_arg - token_size;
-		memcpy(if_->rsp, &tmp, 4);
+		memcpy(if_->rsp, &tmp, 8);
 		top_arg = (char *)top_arg - token_size;
 	}
 	if_->rsp = (char *)if_->rsp - 8;
 	(if_->R).rdi = idx;
 	(if_->R).rsi = (char *)if_->rsp + 8;
 	memset(if_->rsp, 0, 8);
-
-	success = true;
-
-done:
-	/* We arrive here whether the load is successful or not. */
-	file_close(file);
-	return success;
 }
 
 /* Checks whether PHDR describes a valid, loadable segment in
