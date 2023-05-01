@@ -172,6 +172,11 @@ int write(int fd, void *buffer, unsigned int size)
 	struct file *file = curr->file_list[fd];
 	if (fd >= 2)
 	{
+		if (file == NULL)
+		{
+			lock_release(&filesys_lock);
+			return -1;
+		}
 		writen = file_write(file, buffer, size);
 	}
 	else if (fd == 1)
