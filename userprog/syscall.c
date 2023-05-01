@@ -148,8 +148,8 @@ bool create(const char *file, unsigned int initial_size)
 
 int open(const char *file)
 {
-	struct thread *curr = thread_current();
 	lock_acquire(&filesys_lock);
+	struct thread *curr = thread_current();
 	struct file *open_file = filesys_open(file);
 	int fd;
 	if (open_file != NULL)
@@ -159,13 +159,14 @@ int open(const char *file)
 		lock_release(&filesys_lock);
 		return fd;
 	}
+	lock_release(&filesys_lock);
 	return -1;
 }
 
 int filesize(int fd)
 {
-	struct thread *curr = thread_current();
 	lock_acquire(&filesys_lock);
+	struct thread *curr = thread_current();
 	struct file *file = curr->file_list[fd];
 	if (file == NULL)
 	{
@@ -182,8 +183,8 @@ int filesize(int fd)
 int read(int fd, void *buffer, unsigned int size)
 {
 	int readn = 0;
-	struct thread *curr = thread_current();
 	lock_acquire(&filesys_lock);
+	struct thread *curr = thread_current();
 	struct file *file = curr->file_list[fd];
 	char tmp;
 	if (fd >= 2)
@@ -210,8 +211,8 @@ int read(int fd, void *buffer, unsigned int size)
 int write(int fd, void *buffer, unsigned int size)
 {
 	int writen = 0;
-	struct thread *curr = thread_current();
 	lock_acquire(&filesys_lock);
+	struct thread *curr = thread_current();
 	struct file *file = curr->file_list[fd];
 	if (fd >= 2)
 	{
@@ -233,8 +234,8 @@ int write(int fd, void *buffer, unsigned int size)
 
 void seek(int fd, unsigned position)
 {
-	struct thread *curr = thread_current();
 	lock_acquire(&filesys_lock);
+	struct thread *curr = thread_current();
 	struct file *file = curr->file_list[fd];
 	if (file != NULL)
 		file_seek(file, position);
@@ -243,12 +244,19 @@ void seek(int fd, unsigned position)
 
 unsigned tell(int fd)
 {
+	lock_acquire(&filesys_lock);
 	struct thread *curr = thread_current();
 	struct file *file = curr->file_list[fd];
 	if (file != NULL)
+	{
+		lock_release(&filesys_lock);
 		return file_tell(file);
+	}
 	else
+	{
+		lock_release(&filesys_lock);
 		return -1;
+	}
 }
 
 void check_address(void *address)
