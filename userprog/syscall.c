@@ -89,6 +89,7 @@ void syscall_handler(struct intr_frame *f UNUSED)
 		f->R.rax = write(arg1, arg2, arg3);
 		break;
 	case SYS_SEEK:
+		f->R.rax = seek(arg1, arg2);
 		break;
 	case SYS_TELL:
 		break;
@@ -198,6 +199,16 @@ int write(int fd, void *buffer, unsigned int size)
 	}
 	lock_release(&filesys_lock);
 	return writen;
+}
+
+void seek(int fd, unsigned position)
+{
+	struct thread *curr = thread_current();
+	lock_acquire(&filesys_lock);
+	struct file *file = curr->file_list[fd];
+	if (file != NULL)
+		file_seek(file, position);
+	lock_release(&filesys_lock);
 }
 
 void check_address(void *address)
