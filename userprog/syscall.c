@@ -56,7 +56,6 @@ void syscall_handler(struct intr_frame *f UNUSED)
 	uint64_t arg6 = f->R.r9;
 	// TODO: Your implementation goes here.
 	printf("system call!\n");
-	// check_address((void *)f->rsp);
 	switch (f->R.rax)
 	{
 	case SYS_HALT:
@@ -76,6 +75,7 @@ void syscall_handler(struct intr_frame *f UNUSED)
 	case SYS_REMOVE:
 		break;
 	case SYS_OPEN:
+		check_address(arg1);
 		f->R.rax = open(arg1);
 		break;
 	case SYS_FILESIZE:
@@ -83,6 +83,7 @@ void syscall_handler(struct intr_frame *f UNUSED)
 	case SYS_READ:
 		break;
 	case SYS_WRITE:
+		check_address(arg2);
 		f->R.rax = write(arg1, arg2, arg3);
 		break;
 	case SYS_SEEK:
@@ -153,4 +154,11 @@ int write(int fd, void *buffer, unsigned size)
 	lock_release(&filesys_lock);
 	intr_set_level(old_level);
 	return writen;
+}
+
+void check_address(void *address)
+{
+	struct thread *curr = thread_current();
+	if (address == NULL || is_kernel_vaddr(address) || pml4_get_page(curr->pml4, address) == NULL)
+		exit(-1);
 }
