@@ -56,7 +56,6 @@ void syscall_handler(struct intr_frame *f UNUSED)
 	uint64_t arg5 = f->R.r8;
 	uint64_t arg6 = f->R.r9;
 	// TODO: Your implementation goes here.
-	printf("system call!\n");
 	switch (f->R.rax)
 	{
 	case SYS_HALT:
