@@ -13,7 +13,10 @@
 
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
+void halt(void);
+void exit(int status);
 void check_address(void *);
+
 /* System call.
  *
  * Previously system call services was handled by the interrupt handler
@@ -92,6 +95,30 @@ void syscall_handler(struct intr_frame *f UNUSED)
 	// thread_exit();
 }
 
+/*
+ * Halting the OS
+ */
+void halt(void)
+{
+	/* pintOS 종료 */
+	power_off();
+}
+
+/*
+ * Terminating this process
+ */
+void exit(int status)
+{
+	/* 실행 중인 스레드 구조체 가져오기 */
+	struct thread *cur = thread_current;
+
+	/* 프로세스 종료 메시지 출력하기  */
+	printf("%s: exit (%d)\n", cur->name, cur->status);
+
+	/* 스레드 종료 */
+	thread_exit();
+}
+
 int open(const char *file)
 {
 	struct thread *curr = thread_current();
@@ -125,10 +152,3 @@ int write(int fd, void *buffer, unsigned size)
 	intr_set_level(old_level);
 	return writen;
 }
-
-// void check_address(void *address)
-// {
-// 	struct thread *curr = thread_current();
-// 	if (address == NULL || is_kernel_vaddr(address) || pml4_get_page(curr->pml4, address) == NULL)
-// 		exit(-1);
-// }
