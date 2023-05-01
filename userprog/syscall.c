@@ -139,32 +139,44 @@ void exit(int status)
 
 int exec(const char *file)
 {
-	
 }
 
 int wait(pid_t pid)
 {
-
 }
 
 bool create(const char *file, unsigned int initial_size)
 {
+	lock_acquire(&filesys_lock);
 	bool file_create = filesys_create(file, initial_size);
 
 	if (file_create)
+	{
+		lock_release(&filesys_lock);
 		return true;
+	}
 	else
+	{
+		lock_release(&filesys_lock);
 		return false;
+	}
 }
 
 bool remove(const char *file)
 {
+	lock_acquire(&filesys_lock);
 	bool file_remove = filesys_remove(file);
 	if (file_remove)
+	{
+		lock_release(&filesys_lock);
 		return true;
+	}
 	else
+	{
+		lock_release(&filesys_lock);
 		return false;
-} 
+	}
+}
 
 int open(const char *file)
 {
