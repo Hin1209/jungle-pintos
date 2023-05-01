@@ -82,6 +82,8 @@ void syscall_handler(struct intr_frame *f UNUSED)
 		f->R.rax = create(arg1, arg2);
 		break;
 	case SYS_REMOVE:
+		check_address(arg1);
+		f->R.rax = remove(arg1);
 		break;
 	case SYS_OPEN:
 		check_address(arg1);
