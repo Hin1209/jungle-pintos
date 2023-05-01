@@ -134,12 +134,12 @@ void exit(int status)
 }
 
 bool create(const char *file, unsigned int initial_size)
-{	
+{
 	bool file_create = filesys_create(file, initial_size);
-	
+
 	if (file_create)
 		return true;
-	else {
+	else
 		return false;
 }
 
