@@ -16,6 +16,12 @@ void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
 void halt(void);
 void exit(int status);
+int open(const char *file);
+int filesize(int fd);
+int read(int fd, void *buffer, unsigned int size);
+int write(int fd, void *buffer, unsigned int size);
+void seek(int fd, unsigned position);
+unsigned tell(int fd);
 void check_address(void *);
 
 /* System call.
