@@ -200,6 +200,16 @@ int write(int fd, void *buffer, unsigned int size)
 	return writen;
 }
 
+unsigned tell(int fd)
+{
+	struct thread *curr = thread_current();
+	struct file *file = curr->file_list[fd];
+	if (file != NULL)
+		return file_tell(file);
+	else
+		return -1;
+}
+
 void check_address(void *address)
 {
 	struct thread *curr = thread_current();
