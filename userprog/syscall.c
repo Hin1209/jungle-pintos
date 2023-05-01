@@ -133,6 +133,16 @@ void exit(int status)
 	thread_exit();
 }
 
+bool create(const char *file, unsigned int initial_size)
+{	
+	bool file_create = filesys_create(file, initial_size);
+	
+	if (file_create)
+		return true;
+	else {
+		return false;
+}
+
 int open(const char *file)
 {
 	struct thread *curr = thread_current();
