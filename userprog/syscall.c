@@ -79,6 +79,7 @@ void syscall_handler(struct intr_frame *f UNUSED)
 		f->R.rax = open(arg1);
 		break;
 	case SYS_FILESIZE:
+		f->R.rax = filesize(arg1);
 		break;
 	case SYS_READ:
 		check_address(arg2);
@@ -89,8 +90,10 @@ void syscall_handler(struct intr_frame *f UNUSED)
 		f->R.rax = write(arg1, arg2, arg3);
 		break;
 	case SYS_SEEK:
+		f->R.rax = seek(arg1, arg2);
 		break;
 	case SYS_TELL:
+		f->R.rax = tell(arg1);
 		break;
 	case SYS_CLOSE:
 		break;
@@ -127,12 +130,14 @@ void exit(int status)
 int open(const char *file)
 {
 	struct thread *curr = thread_current();
+	lock_acquire(&filesys_lock);
 	struct file *open_file = filesys_open(file);
 	int fd;
 	if (open_file != NULL)
 	{
 		curr->file_list[curr->file_descriptor] = open_file;
 		fd = curr->file_descriptor++;
+		lock_release(&filesys_lock);
 		return fd;
 	}
 	return -1;
@@ -141,11 +146,18 @@ int open(const char *file)
 int filesize(int fd)
 {
 	struct thread *curr = thread_current();
+	lock_acquire(&filesys_lock);
 	struct file *file = curr->file_list[fd];
 	if (file == NULL)
+	{
+		lock_release(&filesys_lock);
 		return -1;
+	}
 	else
+	{
+		lock_release(&filesys_lock);
 		return file_length(file);
+	}
 }
 
 int read(int fd, void *buffer, unsigned int size)
@@ -198,6 +210,26 @@ int write(int fd, void *buffer, unsigned int size)
 	}
 	lock_release(&filesys_lock);
 	return writen;
+}
+
+void seek(int fd, unsigned position)
+{
+	struct thread *curr = thread_current();
+	lock_acquire(&filesys_lock);
+	struct file *file = curr->file_list[fd];
+	if (file != NULL)
+		file_seek(file, position);
+	lock_release(&filesys_lock);
+}
+
+unsigned tell(int fd)
+{
+	struct thread *curr = thread_current();
+	struct file *file = curr->file_list[fd];
+	if (file != NULL)
+		return file_tell(file);
+	else
+		return -1;
 }
 
 void check_address(void *address)
