@@ -44,3 +44,14 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	printf ("system call!\n");
 	thread_exit ();
 }
+
+bool create(const char *file, unsigned int initial_size)
+{	
+	bool file_create = filesys_create(file, initial_size);
+	
+	if (file_create)
+		return true;
+	else {
+		return false;
+	}
+}
