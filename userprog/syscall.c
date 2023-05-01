@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <syscall-nr.h>
 #include <filesys/filesys.h>
+#include <filesys/file.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/loader.h"
@@ -77,6 +78,7 @@ void syscall_handler(struct intr_frame *f UNUSED)
 	case SYS_READ:
 		break;
 	case SYS_WRITE:
+		f->R.rax = write(arg1, arg2, arg3);
 		break;
 	case SYS_SEEK:
 		break;
@@ -87,12 +89,11 @@ void syscall_handler(struct intr_frame *f UNUSED)
 	case SYS_DUP2:
 		break;
 	}
-	thread_exit();
+	// thread_exit();
 }
 
 int open(const char *file)
 {
-	enum intr_level old_level = intr_disable();
 	struct thread *curr = thread_current();
 	struct file *open_file = filesys_open(file);
 	int fd;
@@ -100,11 +101,29 @@ int open(const char *file)
 	{
 		curr->file_list[curr->file_descriptor] = open_file;
 		fd = curr->file_descriptor++;
-		intr_set_level(old_level);
 		return fd;
 	}
-	intr_set_level(old_level);
 	return NULL;
+}
+
+int write(int fd, void *buffer, unsigned size)
+{
+	enum intr_level old_level = intr_disable();
+	int writen = 0;
+	struct thread *curr = thread_current();
+	lock_acquire(&filesys_lock);
+	struct file *file = curr->file_list[fd];
+	if (fd >= 2)
+	{
+		writen = file_write(file, buffer, size);
+	}
+	else if (fd == 1)
+	{
+		writen = puts(buffer);
+	}
+	lock_release(&filesys_lock);
+	intr_set_level(old_level);
+	return writen;
 }
 
 // void check_address(void *address)
