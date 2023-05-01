@@ -16,6 +16,7 @@ void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
 void halt(void);
 void exit(int status);
+bool create(const char *file, unsigned int initial_size);
 int open(const char *file);
 int filesize(int fd);
 int read(int fd, void *buffer, unsigned int size);
@@ -77,6 +78,8 @@ void syscall_handler(struct intr_frame *f UNUSED)
 	case SYS_WAIT:
 		break;
 	case SYS_CREATE:
+		check_address(arg1);
+		f->R.rax = create(arg1, arg2);
 		break;
 	case SYS_REMOVE:
 		break;
