@@ -65,10 +65,7 @@ exit (int status) {
 	struct thread *cur = thread_current;
 
 	/* 프로세스 종료 메시지 출력하기  */
-
-	///////////////////////////////////
-	// status는 enum으로 정의되어있으니까 int(%d) 자료형으로 출력문 받아야 되나?
-	printf("%s: exit (%s)\n", cur->name, cur->status);
+	printf("%s: exit (%d)\n", cur->name, cur->status);
 
 	/* 스레드 종료 */
 	thread_exit ();
