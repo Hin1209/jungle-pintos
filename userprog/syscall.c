@@ -288,13 +288,6 @@ unsigned tell(int fd)
 	}
 }
 
-void check_address(void *address)
-{
-	struct thread *curr = thread_current();
-	if (address == NULL || is_kernel_vaddr(address) || pml4_get_page(curr->pml4, address) == NULL)
-		exit(-1);
-}
-
 void close(int fd)
 {
 	lock_acquire(&filesys_lock);
@@ -308,4 +301,11 @@ void close(int fd)
 		file_close(file);
 	}
 	lock_release(&filesys_lock);
+}
+
+void check_address(void *address)
+{
+	struct thread *curr = thread_current();
+	if (address == NULL || is_kernel_vaddr(address) || pml4_get_page(curr->pml4, address) == NULL)
+		exit(-1);
 }
