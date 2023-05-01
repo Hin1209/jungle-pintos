@@ -192,7 +192,6 @@ int process_exec(void *f_name)
 		size += (strlen(ret_ptr) + 1);
 		sizes[idx] = strlen(ret_ptr) + 1;
 		args[idx] = ret_ptr;
-		ret_ptr = strtok_r(NULL, " ", &next_ptr);
 		idx++;
 	}
 	/* And then load the binary */
