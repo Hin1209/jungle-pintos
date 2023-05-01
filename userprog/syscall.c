@@ -266,3 +266,13 @@ void check_address(void *address)
 	if (address == NULL || is_kernel_vaddr(address) || pml4_get_page(curr->pml4, address) == NULL)
 		exit(-1);
 }
+
+void close(int fd)
+{
+	lock_acquire(&filesys_lock);
+	struct thread *curr = thread_current();
+	struct file *file = curr->file_list[fd];
+	if (file != NULL)
+		file_close(file);
+	lock_release(&filesys_lock);
+}
