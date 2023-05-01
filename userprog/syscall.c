@@ -116,10 +116,10 @@ void halt(void)
 void exit(int status)
 {
 	/* 실행 중인 스레드 구조체 가져오기 */
-	struct thread *cur = thread_current;
+	struct thread *cur = thread_current();
 
 	/* 프로세스 종료 메시지 출력하기  */
-	printf("%s: exit (%d)\n", cur->name, status);
+	printf("%s: exit(%d)\n", cur->name, status);
 
 	/* 스레드 종료 */
 	thread_exit();
