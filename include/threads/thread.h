@@ -104,6 +104,8 @@ struct thread
 	struct list_elem thread_elem;
 	int nice;
 	int recent_cpu;
+	struct file *file_list[64];
+	int file_descriptor;
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
