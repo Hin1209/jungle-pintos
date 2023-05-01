@@ -82,6 +82,8 @@ void syscall_handler(struct intr_frame *f UNUSED)
 		f->R.rax = create(arg1, arg2);
 		break;
 	case SYS_REMOVE:
+		check_address(arg1);
+		f->R.rax = remove(arg1);
 		break;
 	case SYS_OPEN:
 		check_address(arg1);
@@ -139,32 +141,44 @@ void exit(int status)
 
 int exec(const char *file)
 {
-	
 }
 
 int wait(pid_t pid)
 {
-
 }
 
 bool create(const char *file, unsigned int initial_size)
 {
+	lock_acquire(&filesys_lock);
 	bool file_create = filesys_create(file, initial_size);
 
 	if (file_create)
+	{
+		lock_release(&filesys_lock);
 		return true;
+	}
 	else
+	{
+		lock_release(&filesys_lock);
 		return false;
+	}
 }
 
 bool remove(const char *file)
 {
+	lock_acquire(&filesys_lock);
 	bool file_remove = filesys_remove(file);
 	if (file_remove)
+	{
+		lock_release(&filesys_lock);
 		return true;
+	}
 	else
+	{
+		lock_release(&filesys_lock);
 		return false;
-} 
+	}
+}
 
 int open(const char *file)
 {
@@ -288,13 +302,6 @@ unsigned tell(int fd)
 	}
 }
 
-void check_address(void *address)
-{
-	struct thread *curr = thread_current();
-	if (address == NULL || is_kernel_vaddr(address) || pml4_get_page(curr->pml4, address) == NULL)
-		exit(-1);
-}
-
 void close(int fd)
 {
 	lock_acquire(&filesys_lock);
@@ -308,4 +315,11 @@ void close(int fd)
 		file_close(file);
 	}
 	lock_release(&filesys_lock);
+}
+
+void check_address(void *address)
+{
+	struct thread *curr = thread_current();
+	if (address == NULL || is_kernel_vaddr(address) || pml4_get_page(curr->pml4, address) == NULL)
+		exit(-1);
 }
