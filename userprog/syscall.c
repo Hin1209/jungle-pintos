@@ -60,8 +60,10 @@ void syscall_handler(struct intr_frame *f UNUSED)
 	switch (f->R.rax)
 	{
 	case SYS_HALT:
+		halt();
 		break;
 	case SYS_EXIT:
+		exit(arg1);
 		break;
 	case SYS_FORK:
 		break;
