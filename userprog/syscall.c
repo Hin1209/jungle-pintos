@@ -137,6 +137,16 @@ void exit(int status)
 	thread_exit();
 }
 
+int exec(const char *file)
+{
+	
+}
+
+int wait(pid_t pid)
+{
+
+}
+
 bool create(const char *file, unsigned int initial_size)
 {
 	bool file_create = filesys_create(file, initial_size);
