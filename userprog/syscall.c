@@ -138,6 +138,16 @@ int open(const char *file)
 	return -1;
 }
 
+int filesize(int fd)
+{
+	struct thread *curr = thread_current();
+	struct file *file = curr->file_list[fd];
+	if (file == NULL)
+		return -1;
+	else
+		return file_length(file);
+}
+
 int read(int fd, void *buffer, unsigned int size)
 {
 	int readn = 0;
