@@ -147,6 +147,15 @@ bool create(const char *file, unsigned int initial_size)
 		return false;
 }
 
+bool remove(const char *file)
+{
+	bool file_remove = filesys_remove(file);
+	if (file_remove)
+		return true;
+	else
+		return false;
+} 
+
 int open(const char *file)
 {
 	lock_acquire(&filesys_lock);
