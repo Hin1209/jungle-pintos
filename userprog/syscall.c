@@ -14,7 +14,9 @@
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
 void halt(void);
-void exit(int status);
+void exit(int);
+int exec(const char *);
+int wait(pid_t);
 void check_address(void *);
 
 /* System call.
