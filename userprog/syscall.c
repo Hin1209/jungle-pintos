@@ -128,12 +128,14 @@ void exit(int status)
 int open(const char *file)
 {
 	struct thread *curr = thread_current();
+	lock_acquire(&filesys_lock);
 	struct file *open_file = filesys_open(file);
 	int fd;
 	if (open_file != NULL)
 	{
 		curr->file_list[curr->file_descriptor] = open_file;
 		fd = curr->file_descriptor++;
+		lock_release(&filesys_lock);
 		return fd;
 	}
 	return -1;
@@ -142,11 +144,18 @@ int open(const char *file)
 int filesize(int fd)
 {
 	struct thread *curr = thread_current();
+	lock_acquire(&filesys_lock);
 	struct file *file = curr->file_list[fd];
 	if (file == NULL)
+	{
+		lock_release(&filesys_lock);
 		return -1;
+	}
 	else
+	{
+		lock_release(&filesys_lock);
 		return file_length(file);
+	}
 }
 
 int read(int fd, void *buffer, unsigned int size)
