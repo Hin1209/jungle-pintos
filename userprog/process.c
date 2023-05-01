@@ -192,13 +192,11 @@ int process_exec(void *f_name)
 		size += (strlen(ret_ptr) + 1);
 		sizes[idx] = strlen(ret_ptr) + 1;
 		args[idx] = ret_ptr;
-		ret_ptr = strtok_r(NULL, " ", &next_ptr);
 		idx++;
 	}
 	/* And then load the binary */
 	success = load(file_name, &_if);
 	argument_stack(idx, args, sizes, size, &_if);
-	hex_dump(_if.rsp, _if.rsp, USER_STACK - _if.rsp, true);
 
 	/* If load failed, quit. */
 	palloc_free_page(file_name);

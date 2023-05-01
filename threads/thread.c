@@ -10,6 +10,7 @@
 #include "threads/palloc.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "threads/malloc.h"
 #include "intrinsic.h"
 #ifdef USERPROG
 #include "userprog/process.h"
@@ -583,6 +584,7 @@ init_thread(struct thread *t, const char *name, int priority)
 		t->nice = thread_get_nice();
 		t->recent_cpu = thread_get_recent_cpu();
 	}
+	t->file_descriptor = 2;
 	if (t != idle_thread)
 		list_push_back(&thread_list, &t->thread_elem);
 }
