@@ -4,6 +4,7 @@
 #include <syscall-nr.h>
 #include <filesys/filesys.h>
 #include <filesys/file.h>
+#include <devices/input.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/loader.h"
@@ -55,7 +56,6 @@ void syscall_handler(struct intr_frame *f UNUSED)
 	uint64_t arg5 = f->R.r8;
 	uint64_t arg6 = f->R.r9;
 	// TODO: Your implementation goes here.
-	printf("system call!\n");
 	switch (f->R.rax)
 	{
 	case SYS_HALT:
@@ -81,6 +81,8 @@ void syscall_handler(struct intr_frame *f UNUSED)
 	case SYS_FILESIZE:
 		break;
 	case SYS_READ:
+		check_address(arg2);
+		f->R.rax = read(arg1, arg2, arg3);
 		break;
 	case SYS_WRITE:
 		check_address(arg2);
@@ -113,10 +115,10 @@ void halt(void)
 void exit(int status)
 {
 	/* 실행 중인 스레드 구조체 가져오기 */
-	struct thread *cur = thread_current;
+	struct thread *cur = thread_current();
 
 	/* 프로세스 종료 메시지 출력하기  */
-	printf("%s: exit (%d)\n", cur->name, status);
+	printf("%s: exit(%d)\n", cur->name, status);
 
 	/* 스레드 종료 */
 	thread_exit();
@@ -133,26 +135,58 @@ int open(const char *file)
 		fd = curr->file_descriptor++;
 		return fd;
 	}
-	return NULL;
+	return -1;
 }
 
-int write(int fd, void *buffer, unsigned size)
+int read(int fd, void *buffer, unsigned int size)
 {
-	enum intr_level old_level = intr_disable();
+	int readn = 0;
+	struct thread *curr = thread_current();
+	lock_acquire(&filesys_lock);
+	struct file *file = curr->file_list[fd];
+	char tmp;
+	if (fd >= 2)
+	{
+		if (file == NULL)
+		{
+			lock_release(&filesys_lock);
+			return -1;
+		}
+		readn = file_read(file, buffer, size);
+	}
+	else if (fd == 0)
+	{
+		for (unsigned int i = 0; i < size; i++)
+		{
+			*(char *)(buffer + i) = input_getc();
+			readn += 1;
+		}
+	}
+	lock_release(&filesys_lock);
+	return readn;
+}
+
+int write(int fd, void *buffer, unsigned int size)
+{
 	int writen = 0;
 	struct thread *curr = thread_current();
 	lock_acquire(&filesys_lock);
 	struct file *file = curr->file_list[fd];
 	if (fd >= 2)
 	{
+		if (file == NULL)
+		{
+			lock_release(&filesys_lock);
+			return -1;
+		}
 		writen = file_write(file, buffer, size);
 	}
 	else if (fd == 1)
 	{
-		writen = puts(buffer);
+		putbuf(buffer, size);
+		writen = size;
 	}
 	lock_release(&filesys_lock);
-	intr_set_level(old_level);
 	return writen;
 }
 
