@@ -165,7 +165,15 @@ int open(const char *file)
 	if (open_file != NULL)
 	{
 		curr->file_list[curr->file_descriptor] = open_file;
-		fd = curr->file_descriptor++;
+		fd = curr->file_descriptor;
+		for (int i = fd + 1; i < 64; i++)
+		{
+			if (curr->file_list[i] == NULL)
+			{
+				curr->file_descriptor = i;
+				break;
+			}
+		}
 		file_deny_write(open_file);
 		lock_release(&filesys_lock);
 		return fd;
@@ -283,6 +291,11 @@ void close(int fd)
 	struct thread *curr = thread_current();
 	struct file *file = curr->file_list[fd];
 	if (file != NULL)
+	{
+		curr->file_list[fd] = NULL;
+		if (fd < curr->file_descriptor)
+			curr->file_descriptor = fd;
 		file_close(file);
+	}
 	lock_release(&filesys_lock);
 }
