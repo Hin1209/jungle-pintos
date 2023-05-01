@@ -156,6 +156,7 @@ int open(const char *file)
 	{
 		curr->file_list[curr->file_descriptor] = open_file;
 		fd = curr->file_descriptor++;
+		file_deny_write(open_file);
 		lock_release(&filesys_lock);
 		return fd;
 	}
