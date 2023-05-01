@@ -105,6 +105,7 @@ void syscall_handler(struct intr_frame *f UNUSED)
 		f->R.rax = tell(arg1);
 		break;
 	case SYS_CLOSE:
+		close(arg1);
 		break;
 	case SYS_DUP2:
 		break;
