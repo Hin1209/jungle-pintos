@@ -181,7 +181,8 @@ int write(int fd, void *buffer, unsigned int size)
 	}
 	else if (fd == 1)
 	{
-		writen = puts(buffer);
+		putbuf(buffer, size);
+		writen = size;
 	}
 	lock_release(&filesys_lock);
 	return writen;
