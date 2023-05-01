@@ -164,9 +164,8 @@ int read(int fd, void *buffer, unsigned int size)
 	return readn;
 }
 
-int write(int fd, void *buffer, unsigned size)
+int write(int fd, void *buffer, unsigned int size)
 {
-	enum intr_level old_level = intr_disable();
 	int writen = 0;
 	struct thread *curr = thread_current();
 	lock_acquire(&filesys_lock);
@@ -180,7 +179,6 @@ int write(int fd, void *buffer, unsigned size)
 		writen = puts(buffer);
 	}
 	lock_release(&filesys_lock);
-	intr_set_level(old_level);
 	return writen;
 }
 
