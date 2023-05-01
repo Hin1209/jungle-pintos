@@ -133,7 +133,35 @@ int open(const char *file)
 		fd = curr->file_descriptor++;
 		return fd;
 	}
-	return NULL;
+	return -1;
+}
+
+int read(int fd, void *buffer, unsigned int size)
+{
+	int readn = 0;
+	struct thread *curr = thread_current();
+	lock_acquire(&filesys_lock);
+	struct file *file = curr->file_list[fd];
+	char tmp;
+	if (fd >= 2)
+	{
+		if (file == NULL)
+		{
+			lock_release(&filesys_lock);
+			return -1;
+		}
+		readn = file_read(file, buffer, size);
+	}
+	else if (fd == 0)
+	{
+		for (unsigned int i = 0; i < size; i++)
+		{
+			*(char *)(buffer + i) = input_getc();
+			readn += 1;
+		}
+	}
+	lock_release(&filesys_lock);
+	return readn;
 }
 
 int write(int fd, void *buffer, unsigned size)
