@@ -79,6 +79,7 @@ void syscall_handler(struct intr_frame *f UNUSED)
 		f->R.rax = open(arg1);
 		break;
 	case SYS_FILESIZE:
+		f->R.rax = filesize(arg1);
 		break;
 	case SYS_READ:
 		check_address(arg2);
@@ -91,6 +92,7 @@ void syscall_handler(struct intr_frame *f UNUSED)
 	case SYS_SEEK:
 		break;
 	case SYS_TELL:
+		f->R.rax = tell(arg1);
 		break;
 	case SYS_CLOSE:
 		break;
