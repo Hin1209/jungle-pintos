@@ -115,7 +115,7 @@ struct thread
 	struct list_elem child_elem;
 
 	/* 프로세스의 프로그램 메모리 적재 유무 */
-	int p_flag;		// 프로세스 load 실패 시 -1
+	int p_flag; // 프로세스 load 실패 시 -1
 	/* 프로세스가 종료 유무 확인 */
 	int terminated;
 	/* exit 호출 시 프로세스 종료 상태 필드 */
@@ -124,7 +124,7 @@ struct thread
 	struct semaphore exit_sema;
 	/* load 세마포어 */
 	struct semaphore load_sema;
-	
+
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4; /* Page map level 4 */

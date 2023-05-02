@@ -17,12 +17,14 @@ void syscall_handler(struct intr_frame *);
 void halt(void);
 void exit(int status);
 bool create(const char *file, unsigned int initial_size);
+bool remove(const char *file);
 int open(const char *file);
 int filesize(int fd);
 int read(int fd, void *buffer, unsigned int size);
 int write(int fd, void *buffer, unsigned int size);
 void seek(int fd, unsigned position);
 unsigned tell(int fd);
+void close(int fd);
 void check_address(void *);
 
 /* System call.
@@ -188,6 +190,14 @@ int open(const char *file)
 	int fd;
 	if (open_file != NULL)
 	{
+		for (int i = 0; i < 64; i++)
+		{
+			if (curr->file_list[i] == open_file)
+			{
+				lock_release(&filesys_lock);
+				return i;
+			}
+		}
 		curr->file_list[curr->file_descriptor] = open_file;
 		fd = curr->file_descriptor;
 		for (int i = fd + 1; i < 64; i++)
@@ -198,7 +208,6 @@ int open(const char *file)
 				break;
 			}
 		}
-		file_deny_write(open_file);
 		lock_release(&filesys_lock);
 		return fd;
 	}
@@ -237,10 +246,20 @@ int read(int fd, void *buffer, unsigned int size)
 			lock_release(&filesys_lock);
 			return -1;
 		}
+		if (size == 0)
+		{
+			lock_release(&filesys_lock);
+			return 0;
+		}
 		readn = file_read(file, buffer, size);
 	}
 	else if (fd == 0)
 	{
+		if (size == 0)
+		{
+			lock_release(&filesys_lock);
+			return 0;
+		}
 		for (unsigned int i = 0; i < size; i++)
 		{
 			*(char *)(buffer + i) = input_getc();
