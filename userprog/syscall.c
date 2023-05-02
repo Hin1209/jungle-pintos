@@ -217,6 +217,8 @@ int open(const char *file)
 
 int filesize(int fd)
 {
+	if (fd < 2 || fd >= 64)
+		return -1;
 	lock_acquire(&filesys_lock);
 	struct thread *curr = thread_current();
 	struct file *file = curr->file_list[fd];
@@ -234,6 +236,8 @@ int filesize(int fd)
 
 int read(int fd, void *buffer, unsigned int size)
 {
+	if (fd < 2 || fd >= 64)
+		return -1;
 	int readn = 0;
 	lock_acquire(&filesys_lock);
 	struct thread *curr = thread_current();
@@ -272,6 +276,8 @@ int read(int fd, void *buffer, unsigned int size)
 
 int write(int fd, void *buffer, unsigned int size)
 {
+	if (fd < 2 || fd >= 64)
+		return -1;
 	int writen = 0;
 	lock_acquire(&filesys_lock);
 	struct thread *curr = thread_current();
@@ -296,6 +302,8 @@ int write(int fd, void *buffer, unsigned int size)
 
 void seek(int fd, unsigned position)
 {
+	if (fd < 2 || fd >= 64)
+		return -1;
 	lock_acquire(&filesys_lock);
 	struct thread *curr = thread_current();
 	struct file *file = curr->file_list[fd];
@@ -306,6 +314,8 @@ void seek(int fd, unsigned position)
 
 unsigned tell(int fd)
 {
+	if (fd < 2 || fd >= 64)
+		return -1;
 	lock_acquire(&filesys_lock);
 	struct thread *curr = thread_current();
 	struct file *file = curr->file_list[fd];
@@ -323,6 +333,8 @@ unsigned tell(int fd)
 
 void close(int fd)
 {
+	if (fd < 2 || fd >= 64)
+		return -1;
 	lock_acquire(&filesys_lock);
 	struct thread *curr = thread_current();
 	struct file *file = curr->file_list[fd];
