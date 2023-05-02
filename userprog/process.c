@@ -379,6 +379,7 @@ load(const char *file_name, struct intr_frame *if_)
 		goto done;
 	}
 	file_deny_write(file);
+	t->running_file = file;
 	/* Read program headers. */
 	file_ofs = ehdr.e_phoff;
 	for (i = 0; i < ehdr.e_phnum; i++)
@@ -451,7 +452,6 @@ load(const char *file_name, struct intr_frame *if_)
 
 done:
 	/* We arrive here whether the load is successful or not. */
-	file_close(file);
 	return success;
 }
 
