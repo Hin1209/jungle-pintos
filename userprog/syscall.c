@@ -16,6 +16,7 @@ void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
 void halt(void);
 void exit(int status);
+int exec(const char *cmd_line);
 bool create(const char *file, unsigned int initial_size);
 bool remove(const char *file);
 int open(const char *file);
@@ -76,6 +77,8 @@ void syscall_handler(struct intr_frame *f UNUSED)
 	case SYS_FORK:
 		break;
 	case SYS_EXEC:
+		check_address(arg1);
+		exec(arg1);
 		break;
 	case SYS_WAIT:
 		break;
@@ -141,12 +144,17 @@ void exit(int status)
 	thread_exit();
 }
 
-int exec(const char *file)
+int exec(const char *cmd_line)
 {
+	/* 자식 프로세스 생성 */
+	if (process_exec(cmd_line) == -1)
+		return -1;
+	return 0;
 }
 
 int wait(tid_t pid)
 {
+	
 }
 
 bool create(const char *file, unsigned int initial_size)
