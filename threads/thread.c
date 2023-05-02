@@ -591,7 +591,10 @@ init_thread(struct thread *t, const char *name, int priority)
 		list_push_back(&thread_list, &t->thread_elem);
 
 	/* 부모 프로세스 저장 */
-	t->pid = thread_current()->pid;
+	if (t == initial_thread)
+		t->pid = 1;
+	else
+		t->pid = thread_current()->pid;
 	/* 프로그램 로드 X 표시 by p_flag */
 	t->p_flag = -1;
 	/* 프로그램 종료 X 표시 by terminated */
@@ -602,7 +605,8 @@ init_thread(struct thread *t, const char *name, int priority)
 	/* load 세마포어 0으로 초기화 */
 	sema_init(&t->load_sema, 0);
 	/* 자식 리스트에 추가 */
-	list_push_back(&thread_current()->child_list, &t->child_elem);
+	if (t != initial_thread)
+		list_push_back(&thread_current()->child_list, &t->child_elem);
 	/* 자식 리스트 초기화 */
 	list_init(&t->child_list);
 }
