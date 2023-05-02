@@ -145,7 +145,7 @@ int exec(const char *file)
 {
 }
 
-int wait(pid_t pid)
+int wait(tid_t pid)
 {
 }
 

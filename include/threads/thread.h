@@ -108,7 +108,7 @@ struct thread
 	int file_descriptor;
 
 	/* 부모 프로세스의 디스크립터 */
-	pid_t pid;
+	tid_t pid;
 	/* 자식 리스트 */
 	struct list child_list;
 	/* 자식 리스트 element */
