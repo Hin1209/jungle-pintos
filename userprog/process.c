@@ -282,6 +282,29 @@ void process_activate(struct thread *next)
 	tss_update(next);
 }
 
+struct thread *get_child_process(int pid)
+{
+	/* 자식 리스트에 접근하여 프로세스 디스크립터 검색 */
+	struct thread *cur = thread_current();
+	struct thread *tmp;
+	struct list_elem *t;
+	for (t = list_front(&cur->child_list); t != list_end(&cur->child_list); t = list_next(t))
+	{
+		/* 해당 pid가 존재하면 프로세스 디스크립터(찾아진 자식 본인의 pid) 반환 */
+		tmp = list_entry(t, struct thread, child_elem);
+		if (tmp->pid == pid)
+			return tmp->pid;
+	}
+	/* 리스트에 존재하지 않으면 NULL 리턴 */
+	return NULL;
+}
+
+void remove_child_process(struct thread *cp)
+{
+	/* get_child_process를 통해서 찾은 자식 프로세스를 자식 리스트에서 제거 */
+	/* 프로세스 디스크립터 메모리 해제 */
+}
+
 /* We load ELF binaries.  The following definitions are taken
  * from the ELF specification, [ELF1], more-or-less verbatim.  */
 
