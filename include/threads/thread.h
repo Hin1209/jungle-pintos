@@ -105,6 +105,7 @@ struct thread
 	int nice;
 	int recent_cpu;
 	struct file *file_list[64];
+	struct file *running_file;
 	int file_descriptor;
 
 	/* 부모 프로세스의 디스크립터 */

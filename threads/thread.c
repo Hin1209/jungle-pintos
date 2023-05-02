@@ -578,6 +578,7 @@ init_thread(struct thread *t, const char *name, int priority)
 	t->init_priority = priority;
 	t->magic = THREAD_MAGIC;
 	t->wait_lock = NULL;
+	t->running_file = NULL;
 	list_init(&t->donors);
 	if (t != initial_thread)
 	{
