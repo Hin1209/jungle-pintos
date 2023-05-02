@@ -52,6 +52,8 @@ tid_t process_create_initd(const char *file_name)
 	strlcpy(fn_copy, file_name, PGSIZE);
 
 	/* Create a new thread to execute FILE_NAME. */
+	char *tmp;
+	file_name = strtok_r(file_name, " ", tmp);
 	tid = thread_create(file_name, PRI_DEFAULT, initd, fn_copy);
 	if (tid == TID_ERROR)
 		palloc_free_page(fn_copy);
@@ -376,7 +378,7 @@ load(const char *file_name, struct intr_frame *if_)
 		printf("load: %s: error loading executable\n", file_name);
 		goto done;
 	}
-
+	file_deny_write(file);
 	/* Read program headers. */
 	file_ofs = ehdr.e_phoff;
 	for (i = 0; i < ehdr.e_phnum; i++)
