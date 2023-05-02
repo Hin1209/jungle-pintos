@@ -303,6 +303,20 @@ tid_t thread_create(const char *name, int priority,
 	t->tf.cs = SEL_KCSEG;
 	t->tf.eflags = FLAG_IF;
 
+	/* 부모 프로세스 저장 */
+	t->pid = thread_current()->pid;
+	/* 프로그램 로드 X 표시 by p_flag */
+	t->p_flag = -1;
+	/* 프로그램 종료 X 표시 by terminated */
+	t->terminated = 0;
+	t->terminated_status = -1;
+	/* exit 세마포어 0으로 초기화 */
+	sema_init(&t->exit_sema, 0);
+	/* load 세마포어 0으로 초기화 */
+	sema_init(&t->load_sema, 0);
+	/* 자식 리스트에 추가 */
+	list_push_back(&thread_current()->child_list, &t->child_elem);
+
 	/* Add to run queue. */
 	thread_unblock(t);
 
@@ -587,6 +601,9 @@ init_thread(struct thread *t, const char *name, int priority)
 	t->file_descriptor = 2;
 	if (t != idle_thread)
 		list_push_back(&thread_list, &t->thread_elem);
+
+	/* 자식 리스트 초기화 */
+	list_init(&t->child_list);
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
