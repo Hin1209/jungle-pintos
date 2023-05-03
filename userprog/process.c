@@ -78,10 +78,17 @@ initd(void *f_name)
 /* Clones the current process as `name`. Returns the new process's thread id, or
  * TID_ERROR if the thread cannot be created. */
 tid_t process_fork(const char *name, struct intr_frame *if_ UNUSED)
-{
+{	
+	struct thread *current = thread_current();
+	memcpy(&current->tf, if_, sizeof(struct intr_frame));
 	/* Clone current thread to new thread.*/
-	return thread_create(name,
-						 PRI_DEFAULT, __do_fork, thread_current());
+	tid_t child_pid = thread_create(name,
+						 PRI_DEFAULT, __do_fork, current);
+	if (child_pid == TID_ERROR)
+		return TID_ERROR;
+
+	// struct thread *child = get_child_process(child_pid);
+	return child_pid;
 }
 
 #ifndef VM
@@ -97,6 +104,9 @@ duplicate_pte(uint64_t *pte, void *va, void *aux)
 	bool writable;
 
 	/* 1. TODO: If the parent_page is kernel page, then return immediately. */
+	/* 만약 부모페이지가 커널페이지라면*/
+	if (is_kernel_vaddr(parent))
+		return false;
 
 	/* 2. Resolve VA from the parent's page map level 4. */
 	parent_page = pml4_get_page(parent->pml4, va);
@@ -130,6 +140,7 @@ __do_fork(void *aux)
 	struct thread *current = thread_current();
 	/* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
 	struct intr_frame *parent_if;
+	parent_if = &parent->tf;
 	bool succ = true;
 
 	/* 1. Read the cpu context to local stack. */
@@ -149,12 +160,16 @@ __do_fork(void *aux)
 	if (!pml4_for_each(parent->pml4, duplicate_pte, parent))
 		goto error;
 #endif
+	current->running_file = file_duplicate(parent->running_file);
+
+	
 
 	/* TODO: Your code goes here.
 	 * TODO: Hint) To duplicate the file object, use `file_duplicate`
 	 * TODO:       in include/filesys/file.h. Note that parent should not return
 	 * TODO:       from the fork() until this function successfully duplicates
-	 * TODO:       the resources of parent.*/
+	 * TODO:       the resources of parent.*/ 
+	
 
 	process_init();
 

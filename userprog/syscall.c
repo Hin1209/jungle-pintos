@@ -144,6 +144,11 @@ void exit(int status)
 	thread_exit();
 }
 
+tid_t fork(const char *name, struct intr_frame *if_ UNUSED)
+{
+	process_fork(name, if_);
+}
+
 int exec(const char *cmd_line)
 {
 	/* 자식 프로세스 생성 */
