@@ -162,38 +162,11 @@ int exec(const char *cmd_line)
 }
 
 /*
-* 자식 프로세스 pid를 wait, 그것의 종료 상태를 검색
+* process_wait() 호출 -> 자식 프로세스 pid를 wait, 그것의 종료 상태를 검색
 */
-int wait(tid_t pid)
+int wait(tid_t tid)
 {
-	struct thread *cur = thread_current();
-	struct thread *child = NULL;
-	struct list_elem *e = NULL;
-
-	/* 주어진 pid를 가진 자식 스레드 찾기 */
-	// for (e = list_begin(&cur->child_list); e != list_end(&cur->child_list); e = list_next(e))
-	// {
-	// 	child = list_entry(e, struct thread, child_elem);
-	// 	if (child->tid == pid)
-	// 		break;
-	// 	else
-	// 		child = NULL;
-	// }
-	child = get_child_process(pid);
-
-	/* 자식 못 찾으면, -1 즉시 반환 */
-	if (child == NULL)
-		return -1;
-
-	/* 자식 종료까지 wait */
-	sema_down(&child->exit_sema);
-
-	/* 자식의 종료 상태 검색 */
-	int exit_status = child->terminated_status;
-	/* 자식 리스트에서 자식 제거 & 자식 자원 메모리 해제 -> remove_child_process 구현 필요 */
-	remove_child_process(&(child->child_elem));
-
-	return exit_status;	
+	process_wait(tid);
 }
 
 bool create(const char *file, unsigned int initial_size)
