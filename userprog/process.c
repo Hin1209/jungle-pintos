@@ -84,10 +84,13 @@ tid_t process_fork(const char *name, struct intr_frame *if_ UNUSED)
 	/* Clone current thread to new thread.*/
 	tid_t child_pid = thread_create(name,
 						 PRI_DEFAULT, __do_fork, current);
+
 	if (child_pid == TID_ERROR)
 		return TID_ERROR;
 
+	sema_down(&current->load_sema);
 	// struct thread *child = get_child_process(child_pid);
+
 	return child_pid;
 }
 
@@ -145,6 +148,7 @@ __do_fork(void *aux)
 
 	/* 1. Read the cpu context to local stack. */
 	memcpy(&if_, parent_if, sizeof(struct intr_frame));
+	list_push_back(&parent->child_list, &current->child_elem);
 
 	/* 2. Duplicate PT */
 	current->pml4 = pml4_create();
@@ -162,16 +166,19 @@ __do_fork(void *aux)
 #endif
 	current->running_file = file_duplicate(parent->running_file);
 
+	while (!current->running_file)
+	{
+		current->running_file = file_duplicate(parent->running_file);
+	}
 	
-
 	/* TODO: Your code goes here.
 	 * TODO: Hint) To duplicate the file object, use `file_duplicate`
 	 * TODO:       in include/filesys/file.h. Note that parent should not return
 	 * TODO:       from the fork() until this function successfully duplicates
 	 * TODO:       the resources of parent.*/ 
 	
-
 	process_init();
+	sema_up(&current->load_sema);
 
 	/* Finally, switch to the newly created process. */
 	if (succ)
