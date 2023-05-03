@@ -83,6 +83,8 @@ void syscall_handler(struct intr_frame *f UNUSED)
 		exec(arg1);
 		break;
 	case SYS_WAIT:
+		check_address(arg1);
+		wait(arg1);
 		break;
 	case SYS_CREATE:
 		check_address(arg1);
@@ -159,8 +161,12 @@ int exec(const char *cmd_line)
 	return 0;
 }
 
-int wait(tid_t pid)
+/*
+ * process_wait() 호출 -> 자식 프로세스 pid를 wait, 그것의 종료 상태를 검색
+ */
+int wait(tid_t tid)
 {
+	process_wait(tid);
 }
 
 bool create(const char *file, unsigned int initial_size)

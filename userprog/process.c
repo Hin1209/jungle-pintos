@@ -249,11 +249,25 @@ int process_wait(tid_t child_tid UNUSED)
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
-	for (int i = 0; i < 1000000000; i++)
-	{
-	}
+	// for (int i = 0; i < 10000000; i++)
+	// {
+	// }
+	struct thread *cur = thread_current();
+	/* 주어진 pid를 가진 자식 스레드 찾기 */
+	struct thread *child = get_child_process(child_tid);
 
-	return -1;
+	/* 자식 못 찾으면, -1 즉시 반환 */
+	if (child == NULL)
+		return -1;
+
+	/* 자식 종료까지 wait */
+	sema_down(&child->exit_sema);
+	/* 자식의 종료 상태 검색 */
+	int exit_status = child->terminated_status;
+	/* 자식 리스트에서 자식 제거 */
+	list_remove(&child->child_elem);
+
+	return exit_status;
 }
 
 /* Exit the process. This function is called by thread_exit (). */
@@ -315,22 +329,16 @@ struct thread *get_child_process(tid_t tid)
 	/* 자식 리스트에 접근하여 프로세스 디스크립터 검색 */
 	struct thread *cur = thread_current();
 	struct thread *tmp;
-	struct list_elem *t;
-	for (t = list_front(&cur->child_list); t != list_end(&cur->child_list); t = list_next(t))
+	struct list_elem *e;
+	for (e = list_front(&cur->child_list); e != list_end(&cur->child_list); e = list_next(e))
 	{
 		/* 해당 pid가 존재하면 프로세스 디스크립터(찾아진 자식 본인의 pid) 반환 */
-		tmp = list_entry(t, struct thread, child_elem);
+		tmp = list_entry(e, struct thread, child_elem);
 		if (tmp->tid == tid)
 			return tmp;
 	}
 	/* 리스트에 존재하지 않으면 NULL 리턴 */
 	return NULL;
-}
-
-void remove_child_process(struct thread *cp)
-{
-	/* get_child_process를 통해서 찾은 자식 프로세스를 자식 리스트에서 제거 */
-	/* 프로세스 디스크립터 메모리 해제 */
 }
 
 /* We load ELF binaries.  The following definitions are taken
