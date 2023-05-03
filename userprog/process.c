@@ -26,7 +26,7 @@ static void process_cleanup(void);
 static bool load(const char *file_name, struct intr_frame *if_);
 static void initd(void *f_name);
 static void __do_fork(void *);
-struct thread *get_child_process(int tid);
+struct thread *get_child_process(tid_t child_tid);
 
 /* General process initializer for initd and other process. */
 static void
@@ -79,20 +79,20 @@ initd(void *f_name)
 /* Clones the current process as `name`. Returns the new process's thread id, or
  * TID_ERROR if the thread cannot be created. */
 tid_t process_fork(const char *name, struct intr_frame *if_ UNUSED)
-{	
+{
 	struct thread *current = thread_current();
-	memcpy(&current->tf, if_, sizeof(struct intr_frame));
 	/* Clone current thread to new thread.*/
-	tid_t child_pid = thread_create(name,
-						 PRI_DEFAULT, __do_fork, current);
+	tid_t child_tid = thread_create(name,
+									PRI_DEFAULT, __do_fork, current);
 
-	if (child_pid == TID_ERROR)
+	if (child_tid == TID_ERROR)
 		return TID_ERROR;
 
-	sema_down(&current->load_sema);
-	// struct thread *child = get_child_process(child_pid);
+	struct thread *child = get_child_process(child_tid);
+	memcpy(&current->parent_tf, if_, sizeof(struct intr_frame));
+	sema_down(&child->load_sema);
 
-	return child_pid;
+	return child_tid;
 }
 
 #ifndef VM
@@ -109,7 +109,7 @@ duplicate_pte(uint64_t *pte, void *va, void *aux)
 
 	/* 1. TODO: If the parent_page is kernel page, then return immediately. */
 	/* 만약 부모페이지가 커널페이지라면*/
-	if (is_kernel_vaddr(parent))
+	if (is_kernel_vaddr(va))
 		return false;
 
 	/* 2. Resolve VA from the parent's page map level 4. */
@@ -117,16 +117,19 @@ duplicate_pte(uint64_t *pte, void *va, void *aux)
 
 	/* 3. TODO: Allocate new PAL_USER page for the child and set result to
 	 *    TODO: NEWPAGE. */
+	newpage = palloc_get_page(PAL_USER | PAL_ZERO);
 
 	/* 4. TODO: Duplicate parent's page to the new page and
 	 *    TODO: check whether parent's page is writable or not (set WRITABLE
 	 *    TODO: according to the result). */
+	memcpy(newpage, parent_page, PGSIZE);
 
 	/* 5. Add new page to child's page table at address VA with WRITABLE
 	 *    permission. */
 	if (!pml4_set_page(current->pml4, va, newpage, writable))
 	{
 		/* 6. TODO: if fail to insert page, do error handling. */
+		return false;
 	}
 	return true;
 }
@@ -144,7 +147,7 @@ __do_fork(void *aux)
 	struct thread *current = thread_current();
 	/* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
 	struct intr_frame *parent_if;
-	parent_if = &parent->tf;
+	parent_if = &parent->parent_tf;
 	bool succ = true;
 
 	/* 1. Read the cpu context to local stack. */
@@ -171,13 +174,13 @@ __do_fork(void *aux)
 	{
 		current->running_file = file_duplicate(parent->running_file);
 	}
-	
+
 	/* TODO: Your code goes here.
 	 * TODO: Hint) To duplicate the file object, use `file_duplicate`
 	 * TODO:       in include/filesys/file.h. Note that parent should not return
 	 * TODO:       from the fork() until this function successfully duplicates
-	 * TODO:       the resources of parent.*/ 
-	
+	 * TODO:       the resources of parent.*/
+
 	process_init();
 	sema_up(&current->load_sema);
 
@@ -246,7 +249,6 @@ int process_wait(tid_t child_tid UNUSED)
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
-
 	// for (int i = 0; i < 10000000; i++)
 	// {
 	// }
@@ -255,7 +257,8 @@ int process_wait(tid_t child_tid UNUSED)
 	struct thread *child = get_child_process(child_tid);
 
 	/* 자식 못 찾으면, -1 즉시 반환 */
-	if (child == NULL)	return -1;
+	if (child == NULL)
+		return -1;
 
 	/* 자식 종료까지 wait */
 	sema_down(&child->exit_sema);
@@ -275,6 +278,8 @@ void process_exit(void)
 	 * TODO: Implement process termination message (see
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
+	palloc_free_page(curr->file_list);
+	sema_up(&curr->exit_sema);
 
 	process_cleanup();
 }
@@ -319,7 +324,7 @@ void process_activate(struct thread *next)
 	tss_update(next);
 }
 
-struct thread *get_child_process(int tid)
+struct thread *get_child_process(tid_t tid)
 {
 	/* 자식 리스트에 접근하여 프로세스 디스크립터 검색 */
 	struct thread *cur = thread_current();

@@ -279,6 +279,7 @@ tid_t thread_create(const char *name, int priority,
 					thread_func *function, void *aux)
 {
 	struct thread *t;
+	struct file **tmp;
 	tid_t tid;
 
 	ASSERT(function != NULL);
@@ -286,6 +287,10 @@ tid_t thread_create(const char *name, int priority,
 	/* Allocate thread. */
 	t = palloc_get_page(PAL_ZERO);
 	if (t == NULL)
+		return TID_ERROR;
+
+	tmp = palloc_get_page(PAL_ZERO);
+	if (tmp == NULL)
 		return TID_ERROR;
 
 	/* Initialize thread. */
@@ -303,6 +308,7 @@ tid_t thread_create(const char *name, int priority,
 	t->tf.cs = SEL_KCSEG;
 	t->tf.eflags = FLAG_IF;
 
+	t->file_list = tmp;
 
 	/* Add to run queue. */
 	thread_unblock(t);
@@ -346,7 +352,7 @@ void thread_unblock(struct thread *t)
 	ASSERT(t->status == THREAD_BLOCKED);
 
 	if (t != idle_thread)
-		list_push_back(&ready_list, &t->elem);
+		list_push_front(&ready_list, &t->elem);
 	t->status = THREAD_READY;
 
 	if (thread_get_priority() < t->priority)
