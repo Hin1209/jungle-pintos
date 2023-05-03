@@ -104,7 +104,7 @@ struct thread
 	struct list_elem thread_elem;
 	int nice;
 	int recent_cpu;
-	struct file *file_list[64];
+	struct file **file_list;
 	struct file *running_file;
 	int file_descriptor;
 
