@@ -75,6 +75,8 @@ void syscall_handler(struct intr_frame *f UNUSED)
 		exit(arg1);
 		break;
 	case SYS_FORK:
+		check_address(arg1);
+		fork(arg1, f);
 		break;
 	case SYS_EXEC:
 		check_address(arg1);
@@ -144,9 +146,9 @@ void exit(int status)
 	thread_exit();
 }
 
-tid_t fork(const char *name, struct intr_frame *if_ UNUSED)
+tid_t fork(const char *name, struct intr_frame *if_)
 {
-	process_fork(name, if_);
+	return process_fork(name, if_);
 }
 
 int exec(const char *cmd_line)
@@ -159,7 +161,6 @@ int exec(const char *cmd_line)
 
 int wait(tid_t pid)
 {
-	
 }
 
 bool create(const char *file, unsigned int initial_size)
@@ -230,7 +231,7 @@ int open(const char *file)
 
 int filesize(int fd)
 {
-	if (fd < 0 || fd >= 64)
+	if (fd < 2 || fd >= 64)
 		return -1;
 	lock_acquire(&filesys_lock);
 	struct thread *curr = thread_current();
@@ -254,10 +255,10 @@ int read(int fd, void *buffer, unsigned int size)
 	int readn = 0;
 	lock_acquire(&filesys_lock);
 	struct thread *curr = thread_current();
-	struct file *file = curr->file_list[fd];
 	char tmp;
 	if (fd >= 2)
 	{
+		struct file *file = curr->file_list[fd];
 		if (file == NULL)
 		{
 			lock_release(&filesys_lock);
@@ -294,9 +295,9 @@ int write(int fd, void *buffer, unsigned int size)
 	int writen = 0;
 	lock_acquire(&filesys_lock);
 	struct thread *curr = thread_current();
-	struct file *file = curr->file_list[fd];
 	if (fd >= 2)
 	{
+		struct file *file = curr->file_list[fd];
 		if (file == NULL)
 		{
 			lock_release(&filesys_lock);
@@ -315,7 +316,7 @@ int write(int fd, void *buffer, unsigned int size)
 
 void seek(int fd, unsigned position)
 {
-	if (fd < 0 || fd >= 64)
+	if (fd < 2 || fd >= 64)
 		return -1;
 	lock_acquire(&filesys_lock);
 	struct thread *curr = thread_current();
@@ -327,7 +328,7 @@ void seek(int fd, unsigned position)
 
 unsigned tell(int fd)
 {
-	if (fd < 0 || fd >= 64)
+	if (fd < 2 || fd >= 64)
 		return -1;
 	lock_acquire(&filesys_lock);
 	struct thread *curr = thread_current();
@@ -346,7 +347,7 @@ unsigned tell(int fd)
 
 void close(int fd)
 {
-	if (fd < 0 || fd >= 64)
+	if (fd < 2 || fd >= 64)
 		return -1;
 	lock_acquire(&filesys_lock);
 	struct thread *curr = thread_current();
