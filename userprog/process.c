@@ -186,6 +186,12 @@ __do_fork(void *aux)
 	 * TODO:       in include/filesys/file.h. Note that parent should not return
 	 * TODO:       from the fork() until this function successfully duplicates
 	 * TODO:       the resources of parent.*/
+	for (int i = 2; i < 64; i++)
+	{
+		if (parent->file_list[i] != NULL)
+			current->file_list[i] = file_duplicate(parent->file_list[i]);
+	}
+	current->file_descriptor = parent->file_descriptor;
 
 	process_init();
 	sema_up(&current->load_sema);
