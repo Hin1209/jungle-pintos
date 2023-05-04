@@ -156,7 +156,9 @@ __do_fork(void *aux)
 	// memcpy(&if_, parent_if, sizeof(struct intr_frame));
 	// if_.R.rax = 0;
 	memcpy(&current->tf, parent_if, sizeof(struct intr_frame));
+	memcpy(&if_, parent_if, sizeof(struct intr_frame));
 	current->tf.R.rax = 0;
+	if_.R.rax = 0;
 
 	/* 2. Duplicate PT */
 	current->pml4 = pml4_create();
@@ -191,7 +193,7 @@ __do_fork(void *aux)
 
 	/* Finally, switch to the newly created process. */
 	if (succ)
-		do_iret(&current->tf);
+		do_iret(&if_);
 error:
 	thread_exit();
 }
