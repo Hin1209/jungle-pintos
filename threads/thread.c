@@ -616,6 +616,7 @@ init_thread(struct thread *t, const char *name, int priority)
 	sema_init(&t->exit_sema, 0);
 	/* load 세마포어 0으로 초기화 */
 	sema_init(&t->load_sema, 0);
+	sema_init(&t->free_sema, 0);
 	/* 자식 리스트에 추가 */
 	if (t != initial_thread)
 		list_push_back(&thread_current()->child_list, &t->child_elem);
@@ -808,6 +809,9 @@ schedule(void)
 			next->status = THREAD_READY;
 			if (next != idle_thread)
 				list_push_back(&ready_list, &next->elem);
+#ifdef USERPROG
+			process_activate(curr);
+#endif
 		}
 	}
 }

@@ -126,6 +126,7 @@ struct thread
 	struct semaphore exit_sema;
 	/* load 세마포어 */
 	struct semaphore load_sema;
+	struct semaphore free_sema;
 	// struct intr_frame parent_tf; /* Information for switching */
 	struct intr_frame parent_tf; /* Information for switching */
 

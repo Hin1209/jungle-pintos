@@ -91,6 +91,7 @@ tid_t process_fork(const char *name, struct intr_frame *if_ UNUSED)
 
 	struct thread *child = get_child_process(child_tid);
 	sema_down(&child->load_sema);
+	sema_up(&child->free_sema);
 
 	return child_tid;
 }
@@ -186,6 +187,7 @@ __do_fork(void *aux)
 
 	process_init();
 	sema_up(&current->load_sema);
+	sema_down(&current->free_sema);
 
 	/* Finally, switch to the newly created process. */
 	if (succ)
@@ -211,23 +213,9 @@ int process_exec(void *f_name)
 
 	/* We first kill the current context */
 	process_cleanup();
-	char *ret_ptr;
-	char *next_ptr;
-	char *args[128];
-	int sizes[128];
-	int size = 0;
-	int idx = 0;
-	for (ret_ptr = strtok_r(file_name, " ", &next_ptr); ret_ptr != NULL; ret_ptr = strtok_r(NULL, " ", &next_ptr))
-	{
-		size += (strlen(ret_ptr) + 1);
-		sizes[idx] = strlen(ret_ptr) + 1;
-		args[idx] = ret_ptr;
-		idx++;
-	}
 	/* And then load the binary */
 	success = load(file_name, &_if);
-	argument_stack(idx, args, sizes, size, &_if);
-	hex_dump(_if.rsp, _if.rsp, USER_STACK - (uint64_t)_if.rsp, true);
+	// hex_dump(_if.rsp, _if.rsp, USER_STACK - (uint64_t)_if.rsp, true);
 
 	/* If load failed, quit. */
 	palloc_free_page(file_name);
@@ -282,9 +270,6 @@ void process_exit(void)
 	 * TODO: Implement process termination message (see
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
-
-	/* 프로세스 종료 메시지 출력하기  */
-	printf("%s: exit(%d)\n", curr->name, curr->terminated_status);
 
 	sema_up(&curr->wait_sema);
 	sema_down(&curr->exit_sema);
@@ -431,6 +416,19 @@ load(const char *file_name, struct intr_frame *if_)
 		goto done;
 	process_activate(t);
 
+	char *ret_ptr;
+	char *next_ptr;
+	char **args = calloc(sizeof(char *), 128);
+	int *sizes = calloc(sizeof(int), 128);
+	int size = 0;
+	int idx = 0;
+	for (ret_ptr = strtok_r(file_name, " ", &next_ptr); ret_ptr != NULL; ret_ptr = strtok_r(NULL, " ", &next_ptr))
+	{
+		size += (strlen(ret_ptr) + 1);
+		sizes[idx] = strlen(ret_ptr) + 1;
+		args[idx] = ret_ptr;
+		idx++;
+	}
 	/* Open executable file. */
 	file = filesys_open(file_name);
 	if (file == NULL)
@@ -515,6 +513,7 @@ load(const char *file_name, struct intr_frame *if_)
 
 	/* TODO: Your code goes here.
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
+	argument_stack(idx, args, sizes, size, if_);
 
 	success = true;
 
