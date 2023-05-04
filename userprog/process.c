@@ -208,12 +208,11 @@ error:
  * Returns -1 on fail. */
 int process_exec(void *f_name)
 {
-	char *file_name = f_name;
-	bool success;
 
 	/* We cannot use the intr_frame in the thread structure.
 	 * This is because when current thread rescheduled,
 	 * it stores the execution information to the member. */
+	char *file_name = f_name;
 	struct intr_frame _if;
 	_if.ds = _if.es = _if.ss = SEL_UDSEG;
 	_if.cs = SEL_UCSEG;
@@ -221,15 +220,15 @@ int process_exec(void *f_name)
 
 	/* We first kill the current context */
 	process_cleanup();
+	bool success;
 	/* And then load the binary */
 	success = load(file_name, &_if);
-	// hex_dump(_if.rsp, _if.rsp, USER_STACK - (uint64_t)_if.rsp, true);
 
 	/* If load failed, quit. */
-	palloc_free_page(file_name);
 	if (!success)
 		return -1;
 	/* Start switched process. */
+	memcpy(&thread_current()->tf, &_if, sizeof(struct intr_frame));
 	do_iret(&_if);
 	NOT_REACHED();
 }
@@ -426,8 +425,8 @@ load(const char *file_name, struct intr_frame *if_)
 
 	char *ret_ptr;
 	char *next_ptr;
-	char **args = calloc(sizeof(char *), 128);
-	int *sizes = calloc(sizeof(int), 128);
+	char **args = palloc_get_page(PAL_USER);
+	int *sizes = palloc_get_page(PAL_USER);
 	int size = 0;
 	int idx = 0;
 	for (ret_ptr = strtok_r(file_name, " ", &next_ptr); ret_ptr != NULL; ret_ptr = strtok_r(NULL, " ", &next_ptr))
@@ -522,6 +521,8 @@ load(const char *file_name, struct intr_frame *if_)
 	/* TODO: Your code goes here.
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
 	argument_stack(idx, args, sizes, size, if_);
+	palloc_free_page(args);
+	palloc_free_page(sizes);
 
 	success = true;
 
