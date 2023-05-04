@@ -81,6 +81,7 @@ initd(void *f_name)
 tid_t process_fork(const char *name, struct intr_frame *if_ UNUSED)
 {
 	struct thread *current = thread_current();
+	memcpy(&current->parent_tf, if_, sizeof(struct intr_frame));
 	/* Clone current thread to new thread.*/
 	tid_t child_tid = thread_create(name,
 									PRI_DEFAULT, __do_fork, current);
@@ -89,7 +90,6 @@ tid_t process_fork(const char *name, struct intr_frame *if_ UNUSED)
 		return TID_ERROR;
 
 	struct thread *child = get_child_process(child_tid);
-	memcpy(&current->parent_tf, if_, sizeof(struct intr_frame));
 	sema_down(&child->load_sema);
 
 	return child_tid;
@@ -110,19 +110,20 @@ duplicate_pte(uint64_t *pte, void *va, void *aux)
 	/* 1. TODO: If the parent_page is kernel page, then return immediately. */
 	/* 만약 부모페이지가 커널페이지라면*/
 	if (is_kernel_vaddr(va))
-		return false;
+		return true;
 
 	/* 2. Resolve VA from the parent's page map level 4. */
 	parent_page = pml4_get_page(parent->pml4, va);
 
 	/* 3. TODO: Allocate new PAL_USER page for the child and set result to
 	 *    TODO: NEWPAGE. */
-	newpage = palloc_get_page(PAL_USER | PAL_ZERO);
+	newpage = palloc_get_page(PAL_USER);
 
 	/* 4. TODO: Duplicate parent's page to the new page and
 	 *    TODO: check whether parent's page is writable or not (set WRITABLE
 	 *    TODO: according to the result). */
 	memcpy(newpage, parent_page, PGSIZE);
+	writable = is_writable(pte);
 
 	/* 5. Add new page to child's page table at address VA with WRITABLE
 	 *    permission. */
@@ -151,8 +152,10 @@ __do_fork(void *aux)
 	bool succ = true;
 
 	/* 1. Read the cpu context to local stack. */
-	memcpy(&if_, parent_if, sizeof(struct intr_frame));
-	list_push_back(&parent->child_list, &current->child_elem);
+	// memcpy(&if_, parent_if, sizeof(struct intr_frame));
+	// if_.R.rax = 0;
+	memcpy(&current->tf, parent_if, sizeof(struct intr_frame));
+	current->tf.R.rax = 0;
 
 	/* 2. Duplicate PT */
 	current->pml4 = pml4_create();
@@ -186,7 +189,7 @@ __do_fork(void *aux)
 
 	/* Finally, switch to the newly created process. */
 	if (succ)
-		do_iret(&if_);
+		do_iret(&current->tf);
 error:
 	thread_exit();
 }
@@ -208,7 +211,6 @@ int process_exec(void *f_name)
 
 	/* We first kill the current context */
 	process_cleanup();
-
 	char *ret_ptr;
 	char *next_ptr;
 	char *args[128];
@@ -225,6 +227,7 @@ int process_exec(void *f_name)
 	/* And then load the binary */
 	success = load(file_name, &_if);
 	argument_stack(idx, args, sizes, size, &_if);
+	hex_dump(_if.rsp, _if.rsp, USER_STACK - (uint64_t)_if.rsp, true);
 
 	/* If load failed, quit. */
 	palloc_free_page(file_name);
@@ -261,11 +264,12 @@ int process_wait(tid_t child_tid UNUSED)
 		return -1;
 
 	/* 자식 종료까지 wait */
-	sema_down(&child->exit_sema);
+	sema_down(&child->wait_sema);
 	/* 자식의 종료 상태 검색 */
 	int exit_status = child->terminated_status;
 	/* 자식 리스트에서 자식 제거 */
 	list_remove(&child->child_elem);
+	sema_up(&child->exit_sema);
 
 	return exit_status;
 }
@@ -278,8 +282,13 @@ void process_exit(void)
 	 * TODO: Implement process termination message (see
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
+
+	/* 프로세스 종료 메시지 출력하기  */
+	printf("%s: exit(%d)\n", curr->name, curr->terminated_status);
+
+	sema_up(&curr->wait_sema);
+	sema_down(&curr->exit_sema);
 	palloc_free_page(curr->file_list);
-	sema_up(&curr->exit_sema);
 
 	process_cleanup();
 }
@@ -420,7 +429,7 @@ load(const char *file_name, struct intr_frame *if_)
 	t->pml4 = pml4_create();
 	if (t->pml4 == NULL)
 		goto done;
-	process_activate(thread_current());
+	process_activate(t);
 
 	/* Open executable file. */
 	file = filesys_open(file_name);
@@ -437,7 +446,7 @@ load(const char *file_name, struct intr_frame *if_)
 		printf("load: %s: error loading executable\n", file_name);
 		goto done;
 	}
-	file_deny_write(file);
+	// file_deny_write(file);
 	t->running_file = file;
 	/* Read program headers. */
 	file_ofs = ehdr.e_phoff;
