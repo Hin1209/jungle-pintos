@@ -10,6 +10,7 @@
 #include "threads/loader.h"
 #include "userprog/gdt.h"
 #include "threads/flags.h"
+#include "threads/palloc.h"
 #include "intrinsic.h"
 
 void syscall_entry(void);
@@ -154,16 +155,14 @@ tid_t fork(const char *name, struct intr_frame *if_)
 int exec(const char *cmd_line)
 {
 	/* 자식 프로세스 생성 */
-	char *f_name = palloc_get_page(0);
+	char *f_name = palloc_get_page(PAL_ZERO);
 	if (f_name == NULL)
 		return TID_ERROR;
 	strlcpy(f_name, cmd_line, PGSIZE);
 	if (process_exec(f_name) == -1)
 	{
-		palloc_free_page(f_name);
 		return -1;
 	}
-	palloc_free_page(f_name);
 	return 0;
 }
 

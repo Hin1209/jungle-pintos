@@ -224,6 +224,7 @@ int process_exec(void *f_name)
 	/* And then load the binary */
 	success = load(file_name, &_if);
 
+	palloc_free_page(f_name);
 	/* If load failed, quit. */
 	if (!success)
 		return -1;
