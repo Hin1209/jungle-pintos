@@ -76,15 +76,14 @@ void syscall_handler(struct intr_frame *f UNUSED)
 		break;
 	case SYS_FORK:
 		check_address(arg1);
-		fork(arg1, f);
+		f->R.rax = fork(arg1, f);
 		break;
 	case SYS_EXEC:
 		check_address(arg1);
-		exec(arg1);
+		f->R.rax = exec(arg1);
 		break;
 	case SYS_WAIT:
-		check_address(arg1);
-		wait(arg1);
+		f->R.rax = wait(arg1);
 		break;
 	case SYS_CREATE:
 		check_address(arg1);
@@ -139,11 +138,10 @@ void halt(void)
 void exit(int status)
 {
 	/* 실행 중인 스레드 구조체 가져오기 */
-	struct thread *cur = thread_current();
-
+	struct thread *curr = thread_current();
+	curr->terminated_status = status;
 	/* 프로세스 종료 메시지 출력하기  */
-	printf("%s: exit(%d)\n", cur->name, status);
-
+	printf("%s: exit(%d)\n", curr->name, curr->terminated_status);
 	/* 스레드 종료 */
 	thread_exit();
 }
@@ -166,7 +164,7 @@ int exec(const char *cmd_line)
  */
 int wait(tid_t tid)
 {
-	process_wait(tid);
+	return process_wait(tid);
 }
 
 bool create(const char *file, unsigned int initial_size)
@@ -188,23 +186,11 @@ bool create(const char *file, unsigned int initial_size)
 
 bool remove(const char *file)
 {
-	lock_acquire(&filesys_lock);
-	bool file_remove = filesys_remove(file);
-	if (file_remove)
-	{
-		lock_release(&filesys_lock);
-		return true;
-	}
-	else
-	{
-		lock_release(&filesys_lock);
-		return false;
-	}
+	return filesys_remove(file);
 }
 
 int open(const char *file)
 {
-	lock_acquire(&filesys_lock);
 	struct thread *curr = thread_current();
 	struct file *open_file = filesys_open(file);
 	int fd;
@@ -214,7 +200,6 @@ int open(const char *file)
 		{
 			if (curr->file_list[i] == open_file)
 			{
-				lock_release(&filesys_lock);
 				return i;
 			}
 		}
@@ -228,10 +213,8 @@ int open(const char *file)
 				break;
 			}
 		}
-		lock_release(&filesys_lock);
 		return fd;
 	}
-	lock_release(&filesys_lock);
 	return -1;
 }
 
@@ -239,17 +222,14 @@ int filesize(int fd)
 {
 	if (fd < 2 || fd >= 64)
 		return -1;
-	lock_acquire(&filesys_lock);
 	struct thread *curr = thread_current();
 	struct file *file = curr->file_list[fd];
 	if (file == NULL)
 	{
-		lock_release(&filesys_lock);
 		return -1;
 	}
 	else
 	{
-		lock_release(&filesys_lock);
 		return file_length(file);
 	}
 }
@@ -296,13 +276,13 @@ int read(int fd, void *buffer, unsigned int size)
 
 int write(int fd, void *buffer, unsigned int size)
 {
-	if (fd < 0 || fd >= 64)
+	if (fd <= 0 || fd >= 64)
 		return -1;
 	int writen = 0;
-	lock_acquire(&filesys_lock);
 	struct thread *curr = thread_current();
 	if (fd >= 2)
 	{
+		lock_acquire(&filesys_lock);
 		struct file *file = curr->file_list[fd];
 		if (file == NULL)
 		{
@@ -310,13 +290,13 @@ int write(int fd, void *buffer, unsigned int size)
 			return -1;
 		}
 		writen = file_write(file, buffer, size);
+		lock_release(&filesys_lock);
 	}
 	else if (fd == 1)
 	{
 		putbuf(buffer, size);
 		writen = size;
 	}
-	lock_release(&filesys_lock);
 	return writen;
 }
 

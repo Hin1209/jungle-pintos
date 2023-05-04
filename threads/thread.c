@@ -356,7 +356,12 @@ void thread_unblock(struct thread *t)
 	t->status = THREAD_READY;
 
 	if (thread_get_priority() < t->priority)
-		thread_yield();
+	{
+		if (intr_context())
+			intr_yield_on_return();
+		else
+			thread_yield();
+	}
 
 	intr_set_level(old_level);
 }
@@ -600,16 +605,18 @@ init_thread(struct thread *t, const char *name, int priority)
 	if (t == initial_thread)
 		t->pid = 1;
 	else
-		t->pid = thread_current()->pid;
+		t->pid = thread_current()->tid;
 	/* 프로그램 로드 X 표시 by p_flag */
 	t->p_flag = -1;
 	/* 프로그램 종료 X 표시 by terminated */
 	t->terminated = 0;
 	t->terminated_status = -1;
+	sema_init(&t->wait_sema, 0);
 	/* exit 세마포어 0으로 초기화 */
 	sema_init(&t->exit_sema, 0);
 	/* load 세마포어 0으로 초기화 */
 	sema_init(&t->load_sema, 0);
+	sema_init(&t->free_sema, 0);
 	/* 자식 리스트에 추가 */
 	if (t != initial_thread)
 		list_push_back(&thread_current()->child_list, &t->child_elem);
@@ -802,6 +809,9 @@ schedule(void)
 			next->status = THREAD_READY;
 			if (next != idle_thread)
 				list_push_back(&ready_list, &next->elem);
+#ifdef USERPROG
+			process_activate(curr);
+#endif
 		}
 	}
 }

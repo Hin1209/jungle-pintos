@@ -122,9 +122,11 @@ struct thread
 	/* exit 호출 시 프로세스 종료 상태 필드 */
 	enum thread_status terminated_status;
 	/* exit 세마포어 */
+	struct semaphore wait_sema;
 	struct semaphore exit_sema;
 	/* load 세마포어 */
 	struct semaphore load_sema;
+	struct semaphore free_sema;
 	// struct intr_frame parent_tf; /* Information for switching */
 	struct intr_frame parent_tf; /* Information for switching */
 
