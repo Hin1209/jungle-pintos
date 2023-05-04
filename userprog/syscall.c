@@ -203,7 +203,7 @@ int open(const char *file)
 	int fd;
 	if (open_file != NULL)
 	{
-		for (int i = 0; i < 64; i++)
+		for (int i = 0; i < FDT_COUNT; i++)
 		{
 			if (curr->file_list[i] == open_file)
 			{
@@ -212,7 +212,7 @@ int open(const char *file)
 		}
 		curr->file_list[curr->file_descriptor] = open_file;
 		fd = curr->file_descriptor;
-		for (int i = fd + 1; i < 64; i++)
+		for (int i = fd + 1; i < FDT_COUNT; i++)
 		{
 			if (curr->file_list[i] == NULL)
 			{
@@ -227,7 +227,7 @@ int open(const char *file)
 
 int filesize(int fd)
 {
-	if (fd < 2 || fd >= 64)
+	if (fd < 2 || fd >= FDT_COUNT)
 		return -1;
 	struct thread *curr = thread_current();
 	struct file *file = curr->file_list[fd];
@@ -243,7 +243,7 @@ int filesize(int fd)
 
 int read(int fd, void *buffer, unsigned int size)
 {
-	if (fd < 0 || fd >= 64)
+	if (fd < 0 || fd >= FDT_COUNT)
 		return -1;
 	int readn = 0;
 	lock_acquire(&filesys_lock);
@@ -283,7 +283,7 @@ int read(int fd, void *buffer, unsigned int size)
 
 int write(int fd, void *buffer, unsigned int size)
 {
-	if (fd <= 0 || fd >= 64)
+	if (fd <= 0 || fd >= FDT_COUNT)
 		return -1;
 	int writen = 0;
 	struct thread *curr = thread_current();
@@ -309,7 +309,7 @@ int write(int fd, void *buffer, unsigned int size)
 
 void seek(int fd, unsigned position)
 {
-	if (fd < 2 || fd >= 64)
+	if (fd < 2 || fd >= FDT_COUNT)
 		return -1;
 	lock_acquire(&filesys_lock);
 	struct thread *curr = thread_current();
@@ -321,7 +321,7 @@ void seek(int fd, unsigned position)
 
 unsigned tell(int fd)
 {
-	if (fd < 2 || fd >= 64)
+	if (fd < 2 || fd >= FDT_COUNT)
 		return -1;
 	lock_acquire(&filesys_lock);
 	struct thread *curr = thread_current();
@@ -340,7 +340,7 @@ unsigned tell(int fd)
 
 void close(int fd)
 {
-	if (fd < 2 || fd >= 64)
+	if (fd < 2 || fd >= FDT_COUNT)
 		return -1;
 	lock_acquire(&filesys_lock);
 	struct thread *curr = thread_current();

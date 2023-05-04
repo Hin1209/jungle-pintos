@@ -153,8 +153,6 @@ __do_fork(void *aux)
 	bool succ = true;
 
 	/* 1. Read the cpu context to local stack. */
-	// memcpy(&if_, parent_if, sizeof(struct intr_frame));
-	// if_.R.rax = 0;
 	memcpy(&current->tf, parent_if, sizeof(struct intr_frame));
 	memcpy(&if_, parent_if, sizeof(struct intr_frame));
 	current->tf.R.rax = 0;
@@ -176,17 +174,12 @@ __do_fork(void *aux)
 #endif
 	current->running_file = file_duplicate(parent->running_file);
 
-	while (!current->running_file)
-	{
-		current->running_file = file_duplicate(parent->running_file);
-	}
-
 	/* TODO: Your code goes here.
 	 * TODO: Hint) To duplicate the file object, use `file_duplicate`
 	 * TODO:       in include/filesys/file.h. Note that parent should not return
 	 * TODO:       from the fork() until this function successfully duplicates
 	 * TODO:       the resources of parent.*/
-	for (int i = 2; i < 64; i++)
+	for (int i = 2; i < FDT_COUNT; i++)
 	{
 		if (parent->file_list[i] != NULL)
 			current->file_list[i] = file_duplicate(parent->file_list[i]);
@@ -263,6 +256,16 @@ int process_wait(tid_t child_tid UNUSED)
 	sema_down(&child->wait_sema);
 	/* 자식의 종료 상태 검색 */
 	int exit_status = child->terminated_status;
+	file_close(child->running_file);
+	for (int i = 2; i < FDT_COUNT; i++)
+	{
+		if (child->file_list[i] != NULL)
+		{
+			file_close(child->file_list[i]);
+			child->file_list[i] = NULL;
+		}
+	}
+	child->running_file = NULL;
 	/* 자식 리스트에서 자식 제거 */
 	list_remove(&child->child_elem);
 	sema_up(&child->exit_sema);
@@ -280,6 +283,16 @@ void process_exit(void)
 	 * TODO: We recommend you to implement process resource cleanup here. */
 
 	sema_up(&curr->wait_sema);
+	file_close(curr->running_file);
+	for (int i = 2; i < FDT_COUNT; i++)
+	{
+		if (curr->file_list[i] != NULL)
+		{
+			file_close(curr->file_list[i]);
+			curr->file_list[i] = NULL;
+		}
+	}
+	curr->running_file = NULL;
 	sema_down(&curr->exit_sema);
 	palloc_free_page(curr->file_list);
 
@@ -332,6 +345,8 @@ struct thread *get_child_process(tid_t tid)
 	struct thread *cur = thread_current();
 	struct thread *tmp;
 	struct list_elem *e;
+	if (list_empty(&cur->child_list))
+		return NULL;
 	for (e = list_front(&cur->child_list); e != list_end(&cur->child_list); e = list_next(e))
 	{
 		/* 해당 pid가 존재하면 프로세스 디스크립터(찾아진 자식 본인의 pid) 반환 */
@@ -452,7 +467,8 @@ load(const char *file_name, struct intr_frame *if_)
 		printf("load: %s: error loading executable\n", file_name);
 		goto done;
 	}
-	// file_deny_write(file);
+	file_deny_write(file);
+	file_close(t->running_file);
 	t->running_file = file;
 	/* Read program headers. */
 	file_ofs = ehdr.e_phoff;
