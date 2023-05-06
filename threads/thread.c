@@ -289,10 +289,6 @@ tid_t thread_create(const char *name, int priority,
 	if (t == NULL)
 		return TID_ERROR;
 
-	tmp = palloc_get_page(PAL_ZERO);
-	if (tmp == NULL)
-		return TID_ERROR;
-
 	/* Initialize thread. */
 	init_thread(t, name, priority);
 	tid = t->tid = allocate_tid();
@@ -308,7 +304,12 @@ tid_t thread_create(const char *name, int priority,
 	t->tf.cs = SEL_KCSEG;
 	t->tf.eflags = FLAG_IF;
 
-	t->file_list = tmp;
+	t->file_list = palloc_get_multiple(PAL_ZERO, FDT_PAGES);
+	if (t->file_list == NULL)
+	{
+		palloc_free_page(t);
+		return TID_ERROR;
+	}
 
 	/* Add to run queue. */
 	thread_unblock(t);
@@ -609,14 +610,12 @@ init_thread(struct thread *t, const char *name, int priority)
 	/* 프로그램 로드 X 표시 by p_flag */
 	t->p_flag = -1;
 	/* 프로그램 종료 X 표시 by terminated */
-	t->terminated = 0;
-	t->terminated_status = -1;
+	t->terminated_status = 0;
 	sema_init(&t->wait_sema, 0);
 	/* exit 세마포어 0으로 초기화 */
 	sema_init(&t->exit_sema, 0);
 	/* load 세마포어 0으로 초기화 */
 	sema_init(&t->load_sema, 0);
-	sema_init(&t->free_sema, 0);
 	/* 자식 리스트에 추가 */
 	if (t != initial_thread)
 		list_push_back(&thread_current()->child_list, &t->child_elem);
@@ -746,6 +745,19 @@ thread_launch(struct thread *th)
  * This function modify current thread's status to status and then
  * finds another thread to run and switches to it.
  * It's not safe to call printf() in the schedule(). */
+
+void go_to_die(void)
+{
+	enum intr_level old_level = intr_disable();
+	while (!list_empty(&destruction_req))
+	{
+		struct thread *victim = list_entry(list_pop_front(&destruction_req), struct thread, elem);
+		palloc_free_page(victim);
+	}
+	intr_set_level(old_level);
+}
+
+int die = 0;
 static void
 do_schedule(int status)
 {

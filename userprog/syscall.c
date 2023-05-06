@@ -121,7 +121,6 @@ void syscall_handler(struct intr_frame *f UNUSED)
 	case SYS_DUP2:
 		break;
 	}
-	// thread_exit();
 }
 
 /*
@@ -155,15 +154,12 @@ tid_t fork(const char *name, struct intr_frame *if_)
 int exec(const char *cmd_line)
 {
 	/* 자식 프로세스 생성 */
-	char *f_name = palloc_get_page(PAL_ZERO);
+	char *f_name = palloc_get_page(0);
 	if (f_name == NULL)
-		return TID_ERROR;
+		exit(-1);
 	strlcpy(f_name, cmd_line, PGSIZE);
 	if (process_exec(f_name) == -1)
-	{
-		return -1;
-	}
-	return 0;
+		exit(-1);
 }
 
 /*
@@ -171,24 +167,17 @@ int exec(const char *cmd_line)
  */
 int wait(tid_t tid)
 {
-	return process_wait(tid);
+	process_wait(tid);
 }
 
 bool create(const char *file, unsigned int initial_size)
 {
-	lock_acquire(&filesys_lock);
 	bool file_create = filesys_create(file, initial_size);
 
 	if (file_create)
-	{
-		lock_release(&filesys_lock);
 		return true;
-	}
 	else
-	{
-		lock_release(&filesys_lock);
 		return false;
-	}
 }
 
 bool remove(const char *file)
@@ -200,34 +189,24 @@ int open(const char *file)
 {
 	struct thread *curr = thread_current();
 	struct file *open_file = filesys_open(file);
-	int fd;
 	if (open_file != NULL)
 	{
-		for (int i = 0; i < FDT_COUNT; i++)
+		while (curr->file_descriptor < FDT_COUNT && curr->file_list[curr->file_descriptor])
+			curr->file_descriptor++;
+		if (curr->file_descriptor == FDT_COUNT)
 		{
-			if (curr->file_list[i] == open_file)
-			{
-				return i;
-			}
+			file_close(open_file);
+			return -1;
 		}
 		curr->file_list[curr->file_descriptor] = open_file;
-		fd = curr->file_descriptor;
-		for (int i = fd + 1; i < FDT_COUNT; i++)
-		{
-			if (curr->file_list[i] == NULL)
-			{
-				curr->file_descriptor = i;
-				break;
-			}
-		}
-		return fd;
+		return curr->file_descriptor;
 	}
 	return -1;
 }
 
 int filesize(int fd)
 {
-	if (fd < 2 || fd >= FDT_COUNT)
+	if (fd < 2 || fd > FDT_COUNT)
 		return -1;
 	struct thread *curr = thread_current();
 	struct file *file = curr->file_list[fd];
@@ -243,10 +222,9 @@ int filesize(int fd)
 
 int read(int fd, void *buffer, unsigned int size)
 {
-	if (fd < 0 || fd >= FDT_COUNT)
+	if (fd < 0 || fd > FDT_COUNT)
 		return -1;
 	int readn = 0;
-	lock_acquire(&filesys_lock);
 	struct thread *curr = thread_current();
 	char tmp;
 	if (fd >= 2)
@@ -254,48 +232,39 @@ int read(int fd, void *buffer, unsigned int size)
 		struct file *file = curr->file_list[fd];
 		if (file == NULL)
 		{
-			lock_release(&filesys_lock);
 			return -1;
 		}
-		if (size == 0)
-		{
-			lock_release(&filesys_lock);
-			return 0;
-		}
+		lock_acquire(&filesys_lock);
 		readn = file_read(file, buffer, size);
+		lock_release(&filesys_lock);
 	}
 	else if (fd == 0)
 	{
-		if (size == 0)
-		{
-			lock_release(&filesys_lock);
-			return 0;
-		}
 		for (unsigned int i = 0; i < size; i++)
 		{
 			*(char *)(buffer + i) = input_getc();
-			readn += 1;
+			if (*(char *)(buffer + i) == '\n')
+				break;
+			readn++;
 		}
 	}
-	lock_release(&filesys_lock);
 	return readn;
 }
 
 int write(int fd, void *buffer, unsigned int size)
 {
-	if (fd <= 0 || fd >= FDT_COUNT)
+	if (fd <= 0 || fd > FDT_COUNT)
 		return -1;
 	int writen = 0;
 	struct thread *curr = thread_current();
 	if (fd >= 2)
 	{
-		lock_acquire(&filesys_lock);
 		struct file *file = curr->file_list[fd];
 		if (file == NULL)
 		{
-			lock_release(&filesys_lock);
 			return -1;
 		}
+		lock_acquire(&filesys_lock);
 		writen = file_write(file, buffer, size);
 		lock_release(&filesys_lock);
 	}
@@ -309,7 +278,7 @@ int write(int fd, void *buffer, unsigned int size)
 
 void seek(int fd, unsigned position)
 {
-	if (fd < 2 || fd >= FDT_COUNT)
+	if (fd < 2 || fd > FDT_COUNT)
 		return -1;
 	lock_acquire(&filesys_lock);
 	struct thread *curr = thread_current();
@@ -321,7 +290,7 @@ void seek(int fd, unsigned position)
 
 unsigned tell(int fd)
 {
-	if (fd < 2 || fd >= FDT_COUNT)
+	if (fd < 2 || fd > FDT_COUNT)
 		return -1;
 	lock_acquire(&filesys_lock);
 	struct thread *curr = thread_current();
@@ -340,19 +309,15 @@ unsigned tell(int fd)
 
 void close(int fd)
 {
-	if (fd < 2 || fd >= FDT_COUNT)
+	if (fd < 2 || fd > FDT_COUNT)
 		return -1;
-	lock_acquire(&filesys_lock);
 	struct thread *curr = thread_current();
 	struct file *file = curr->file_list[fd];
 	if (file != NULL)
 	{
-		curr->file_list[fd] = NULL;
-		if (fd < curr->file_descriptor)
-			curr->file_descriptor = fd;
 		file_close(file);
+		curr->file_list[fd] = NULL;
 	}
-	lock_release(&filesys_lock);
 }
 
 void check_address(void *address)
