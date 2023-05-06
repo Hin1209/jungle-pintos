@@ -93,7 +93,10 @@ tid_t process_fork(const char *name, struct intr_frame *if_ UNUSED)
 	struct thread *child = get_child_process(child_tid);
 	sema_down(&child->load_sema);
 	if (child->terminated_status == -2)
+	{
+		sema_up(&child->exit_sema);
 		return TID_ERROR;
+	}
 
 	return child_tid;
 }
@@ -153,6 +156,7 @@ __do_fork(void *aux)
 	struct intr_frame if_;
 	struct thread *parent = (struct thread *)aux;
 	struct thread *current = thread_current();
+	go_to_die();
 	/* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
 	struct intr_frame *parent_if;
 	parent_if = &parent->parent_tf;
