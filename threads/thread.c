@@ -304,9 +304,10 @@ tid_t thread_create(const char *name, int priority,
 	t->tf.cs = SEL_KCSEG;
 	t->tf.eflags = FLAG_IF;
 
-	t->file_list = palloc_get_multiple(PAL_ZERO, FDT_PAGES);
+	t->file_list = palloc_get_page(PAL_ZERO);
 	if (t->file_list == NULL)
 	{
+		list_remove(&t->child_elem);
 		palloc_free_page(t);
 		return TID_ERROR;
 	}
@@ -331,8 +332,7 @@ void thread_block(void)
 {
 	ASSERT(!intr_context());
 	ASSERT(intr_get_level() == INTR_OFF);
-	thread_current()->status = THREAD_BLOCKED;
-	schedule();
+	do_schedule(THREAD_BLOCKED);
 }
 
 /* Transitions a blocked thread T to the ready-to-run state.
@@ -435,6 +435,7 @@ void thread_exit(void)
 
 	/* Just set our status to dying and schedule another process.
 	   We will be destroyed during the call to schedule_tail(). */
+	list_remove(&thread_current()->thread_elem);
 	intr_disable();
 	do_schedule(THREAD_DYING);
 	NOT_REACHED();
@@ -806,7 +807,6 @@ schedule(void)
 			{
 				ASSERT(curr != next);
 				list_push_back(&destruction_req, &curr->elem);
-				list_remove(&curr->thread_elem);
 			}
 			else if (curr && curr->status == THREAD_READY && curr != idle_thread)
 				list_push_back(&ready_list, &curr->elem);

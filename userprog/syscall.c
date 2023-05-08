@@ -193,7 +193,7 @@ int open(const char *file)
 	{
 		while (curr->file_descriptor < FDT_COUNT && curr->file_list[curr->file_descriptor])
 			curr->file_descriptor++;
-		if (curr->file_descriptor == FDT_COUNT)
+		if (curr->file_descriptor >= FDT_COUNT)
 		{
 			file_close(open_file);
 			return -1;
@@ -227,16 +227,16 @@ int read(int fd, void *buffer, unsigned int size)
 	int readn = 0;
 	struct thread *curr = thread_current();
 	char tmp;
+	lock_acquire(&filesys_lock);
 	if (fd >= 2)
 	{
 		struct file *file = curr->file_list[fd];
 		if (file == NULL)
 		{
+			lock_release(&filesys_lock);
 			return -1;
 		}
-		lock_acquire(&filesys_lock);
 		readn = file_read(file, buffer, size);
-		lock_release(&filesys_lock);
 	}
 	else if (fd == 0)
 	{
@@ -248,6 +248,7 @@ int read(int fd, void *buffer, unsigned int size)
 			readn++;
 		}
 	}
+	lock_release(&filesys_lock);
 	return readn;
 }
 
@@ -257,22 +258,23 @@ int write(int fd, void *buffer, unsigned int size)
 		return -1;
 	int writen = 0;
 	struct thread *curr = thread_current();
+	lock_acquire(&filesys_lock);
 	if (fd >= 2)
 	{
 		struct file *file = curr->file_list[fd];
 		if (file == NULL)
 		{
+			lock_release(&filesys_lock);
 			return -1;
 		}
-		lock_acquire(&filesys_lock);
 		writen = file_write(file, buffer, size);
-		lock_release(&filesys_lock);
 	}
 	else if (fd == 1)
 	{
 		putbuf(buffer, size);
 		writen = size;
 	}
+	lock_release(&filesys_lock);
 	return writen;
 }
 
@@ -280,29 +282,24 @@ void seek(int fd, unsigned position)
 {
 	if (fd < 2 || fd > FDT_COUNT)
 		return -1;
-	lock_acquire(&filesys_lock);
 	struct thread *curr = thread_current();
 	struct file *file = curr->file_list[fd];
 	if (file != NULL)
 		file_seek(file, position);
-	lock_release(&filesys_lock);
 }
 
 unsigned tell(int fd)
 {
 	if (fd < 2 || fd > FDT_COUNT)
 		return -1;
-	lock_acquire(&filesys_lock);
 	struct thread *curr = thread_current();
 	struct file *file = curr->file_list[fd];
 	if (file != NULL)
 	{
-		lock_release(&filesys_lock);
 		return file_tell(file);
 	}
 	else
 	{
-		lock_release(&filesys_lock);
 		return -1;
 	}
 }
@@ -310,7 +307,7 @@ unsigned tell(int fd)
 void close(int fd)
 {
 	if (fd < 2 || fd > FDT_COUNT)
-		return -1;
+		return;
 	struct thread *curr = thread_current();
 	struct file *file = curr->file_list[fd];
 	if (file != NULL)

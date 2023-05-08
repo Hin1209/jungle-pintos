@@ -83,7 +83,6 @@ tid_t process_fork(const char *name, struct intr_frame *if_ UNUSED)
 	struct thread *current = thread_current();
 	memcpy(&current->parent_tf, if_, sizeof(struct intr_frame));
 	/* Clone current thread to new thread.*/
-	go_to_die();
 	tid_t child_tid = thread_create(name,
 									PRI_DEFAULT, __do_fork, current);
 
@@ -95,6 +94,7 @@ tid_t process_fork(const char *name, struct intr_frame *if_ UNUSED)
 	if (child->terminated_status == -2)
 	{
 		sema_up(&child->exit_sema);
+		list_remove(&child->child_elem);
 		return TID_ERROR;
 	}
 
@@ -140,6 +140,7 @@ duplicate_pte(uint64_t *pte, void *va, void *aux)
 	if (!pml4_set_page(current->pml4, va, newpage, writable))
 	{
 		/* 6. TODO: if fail to insert page, do error handling. */
+		palloc_free_page(newpage);
 		return false;
 	}
 	return true;
@@ -156,14 +157,12 @@ __do_fork(void *aux)
 	struct intr_frame if_;
 	struct thread *parent = (struct thread *)aux;
 	struct thread *current = thread_current();
-	go_to_die();
+	struct file **tmp = current->file_list;
 	/* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
-	struct intr_frame *parent_if;
-	parent_if = &parent->parent_tf;
 	bool succ = true;
 
 	/* 1. Read the cpu context to local stack. */
-	memcpy(&if_, parent_if, sizeof(struct intr_frame));
+	memcpy(&if_, &parent->parent_tf, sizeof(struct intr_frame));
 	if_.R.rax = 0;
 
 	/* 2. Duplicate PT */
@@ -186,21 +185,28 @@ __do_fork(void *aux)
 	 * TODO:       in include/filesys/file.h. Note that parent should not return
 	 * TODO:       from the fork() until this function successfully duplicates
 	 * TODO:       the resources of parent.*/
+	current->file_list = tmp;
+	if (parent->file_descriptor > FDT_COUNT)
+		goto error;
 	for (int i = 2; i < FDT_COUNT; i++)
 	{
 		if (parent->file_list[i] != NULL)
-			if (!(current->file_list[i] = file_duplicate(parent->file_list[i])))
+		{
+			current->file_list[i] = file_duplicate(parent->file_list[i]);
+			if (current->file_list[i] == NULL)
 				goto error;
+		}
 	}
 	current->file_descriptor = parent->file_descriptor;
 
 	sema_up(&current->load_sema);
 	process_init();
-
+	go_to_die();
 	/* Finally, switch to the newly created process. */
 	if (succ)
 		do_iret(&if_);
 error:
+	go_to_die();
 	sema_up(&current->load_sema);
 	exit(-2);
 }
@@ -218,6 +224,7 @@ int process_exec(void *f_name)
 	_if.ds = _if.es = _if.ss = SEL_UDSEG;
 	_if.cs = SEL_UCSEG;
 	_if.eflags = FLAG_IF | FLAG_MBS;
+	go_to_die();
 
 	/* We first kill the current context */
 	process_cleanup();
@@ -228,7 +235,7 @@ int process_exec(void *f_name)
 	palloc_free_page(f_name);
 	/* If load failed, quit. */
 	if (!success)
-		exit(-1);
+		return -1;
 	/* Start switched process. */
 	do_iret(&_if);
 	NOT_REACHED();
@@ -275,12 +282,21 @@ void process_exit(void)
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
 
+	process_cleanup();
 	for (int i = 2; i < FDT_COUNT; i++)
 		close(i);
-	palloc_free_multiple(curr->file_list, FDT_PAGES);
+	palloc_free_page(curr->file_list);
 
 	file_close(curr->running_file);
-	process_cleanup();
+	if (!list_empty(&curr->child_list))
+	{
+		for (struct list_elem *e = list_begin(&curr->child_list); e != list_end(&curr->child_list); e = list_next(e))
+		{
+			struct thread *child = list_entry(e, struct thread, child_elem);
+			list_remove(&child->child_elem);
+			sema_up(&child->exit_sema);
+		}
+	}
 	sema_up(&curr->wait_sema);
 	sema_down(&curr->exit_sema);
 }
@@ -331,7 +347,6 @@ struct thread *get_child_process(tid_t tid)
 	struct thread *cur = thread_current();
 	struct thread *tmp;
 	struct list_elem *e;
-	enum intr_level old_level = intr_disable();
 	if (list_empty(&cur->child_list))
 		return NULL;
 	for (e = list_front(&cur->child_list); e != list_end(&cur->child_list); e = list_next(e))
@@ -340,11 +355,9 @@ struct thread *get_child_process(tid_t tid)
 		tmp = list_entry(e, struct thread, child_elem);
 		if (tmp->tid == tid)
 		{
-			intr_set_level(old_level);
 			return tmp;
 		}
 	}
-	intr_set_level(old_level);
 	/* 리스트에 존재하지 않으면 NULL 리턴 */
 	return NULL;
 }
@@ -432,23 +445,10 @@ load(const char *file_name, struct intr_frame *if_)
 
 	char *ret_ptr;
 	char *next_ptr;
-	char **args = palloc_get_page(PAL_USER | PAL_ZERO);
-	if (args == NULL)
-	{
-		exit(-1);
-	}
-	int *sizes = palloc_get_page(PAL_USER | PAL_ZERO);
-	if (sizes == NULL)
-	{
-		palloc_free_page(args);
-		exit(-1);
-	}
-	int size = 0;
+	char *args[32];
 	int idx = 0;
 	for (ret_ptr = strtok_r(file_name, " ", &next_ptr); ret_ptr != NULL; ret_ptr = strtok_r(NULL, " ", &next_ptr))
 	{
-		size += (strlen(ret_ptr) + 1);
-		sizes[idx] = strlen(ret_ptr) + 1;
 		args[idx] = ret_ptr;
 		idx++;
 	}
@@ -459,6 +459,8 @@ load(const char *file_name, struct intr_frame *if_)
 		printf("load: %s: open failed\n", file_name);
 		goto done;
 	}
+	t->running_file = file;
+	file_deny_write(file);
 
 	/* Read and verify executable header. */
 	if (file_read(file, &ehdr, sizeof ehdr) != sizeof ehdr || memcmp(ehdr.e_ident, "\177ELF\2\1\1", 7) || ehdr.e_type != 2 || ehdr.e_machine != 0x3E // amd64
@@ -524,8 +526,6 @@ load(const char *file_name, struct intr_frame *if_)
 			break;
 		}
 	}
-	t->running_file = file;
-	file_deny_write(file);
 
 	/* Set up stack. */
 	if (!setup_stack(if_))
@@ -536,53 +536,52 @@ load(const char *file_name, struct intr_frame *if_)
 
 	/* TODO: Your code goes here.
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
-	argument_stack(idx, args, sizes, size, if_);
+	argument_stack(args, idx, &if_->rsp);
+	(if_->R).rdi = idx;
+	(if_->R).rsi = (char *)if_->rsp + 8;
 
 	success = true;
 
 done:
 	/* We arrive here whether the load is successful or not. */
-	palloc_free_page(args);
-	palloc_free_page(sizes);
 	return success;
 }
 
-void argument_stack(int idx, char **args, int *sizes, int size, struct intr_frame *if_)
+void argument_stack(char **parse, int count, void **rsp) // 주소를 전달받았으므로 이중 포인터 사용
 {
-
-	int align = 1;
-
-	while (8 * align++ <= size)
-		;
-
-	uintptr_t top_arg = if_->rsp;
-	int token_size;
-	for (int i = idx - 1; i >= 0; i--)
+	// 프로그램 이름, 인자 문자열 push
+	for (int i = count - 1; i > -1; i--)
 	{
-		token_size = sizes[i];
-		if_->rsp = (char *)if_->rsp - token_size;
-		memcpy(if_->rsp, args[i], token_size);
+		for (int j = strlen(parse[i]); j > -1; j--)
+		{
+			(*rsp)--;					  // 스택 주소 감소
+			**(char **)rsp = parse[i][j]; // 주소에 문자 저장
+		}
+		parse[i] = *(char **)rsp; // parse[i]에 현재 rsp의 값 저장해둠(지금 저장한 인자가 시작하는 주소값)
 	}
-	if (8 * align > size)
+
+	// 정렬 패딩 push
+	int padding = (int)*rsp % 8;
+	for (int i = 0; i < padding; i++)
 	{
-		if_->rsp = (char *)if_->rsp - (8 * align - size);
-		memset(if_->rsp, 0, 8 * align - size);
+		(*rsp)--;
+		**(uint8_t **)rsp = 0; // rsp 직전까지 값 채움
 	}
-	if_->rsp = (char *)if_->rsp - 8;
-	unsigned int *tmp = 0;
-	memset(if_->rsp, 0, 8);
-	for (int i = idx - 1; i >= 0; i--)
+
+	// 인자 문자열 종료를 나타내는 0 push
+	(*rsp) -= 8;
+	**(char ***)rsp = 0;
+
+	// 각 인자 문자열의 주소 push
+	for (int i = count - 1; i > -1; i--)
 	{
-		if_->rsp = (char *)if_->rsp - 8;
-		token_size = sizes[i];
-		tmp = (char *)top_arg - token_size;
-		memcpy(if_->rsp, &tmp, 8);
-		top_arg = (char *)top_arg - token_size;
+		(*rsp) -= 8; // 다음 주소로 이동
+		**(char ***)rsp = parse[i];
 	}
-	if_->rsp = (char *)if_->rsp - 8;
-	(if_->R).rdi = idx;
-	(if_->R).rsi = (char *)if_->rsp + 8;
-	memset(if_->rsp, 0, 8);
+
+	// return address push
+	(*rsp) -= 8;
+	**(void ***)rsp = 0;
 }
 
 /* Checks whether PHDR describes a valid, loadable segment in
