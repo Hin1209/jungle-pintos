@@ -1,4 +1,5 @@
 {
+<<<<<<< HEAD
     "files.associations": {
         "*.c": "c",
         "list.h": "c",
@@ -7,3 +8,12 @@
         "*.inc": "c"
     }
 }
+=======
+  "files.associations": {
+    "*.c": "c",
+    "list.h": "c",
+    "synch.h": "c",
+    "process.h": "c"
+  }
+}
+>>>>>>> master

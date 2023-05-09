@@ -3,5 +3,5 @@
 #include "threads/synch.h"
 
 struct lock filesys_lock;
-void syscall_init (void);
+void syscall_init(void);
 #endif /* userprog/syscall.h */
