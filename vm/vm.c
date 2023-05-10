@@ -16,6 +16,8 @@ vm_init (void) {
 	register_inspect_intr ();
 	/* DO NOT MODIFY UPPER LINES. */
 	/* TODO: Your code goes here. */
+	list_init(&frame_table);
+
 }
 
 /* Get the type of the page. This function is useful if you want to know the
@@ -65,17 +67,27 @@ struct page *
 spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 	struct page *page = NULL;
 	/* TODO: Fill this function. */
+	struct page *tmp = malloc(sizeof(struct page));
+	tmp->va = va;
+	struct hash_elem *h = hash_find(&spt->spt_hash, &tmp->page_elem);
+	if(h==NULL)
+	{
 
+	}
+	page = hash_entry(h, struct page, page_elem);
+	free(tmp);
 	return page;
 }
 
 /* Insert PAGE into spt with validation. */
 bool
-spt_insert_page (struct supplemental_page_table *spt UNUSED,
-		struct page *page UNUSED) {
+spt_insert_page (struct supplemental_page_table *spt UNUSED, struct page *page UNUSED) {
 	int succ = false;
 	/* TODO: Fill this function. */
-
+	if (hash_insert(&spt->spt_hash, &page->page_elem))
+	{
+		succ = true;
+	}
 	return succ;
 }
 
@@ -112,7 +124,18 @@ static struct frame *
 vm_get_frame (void) {
 	struct frame *frame = NULL;
 	/* TODO: Fill this function. */
-
+  // palloc으로 프레임 할당
+  frame = malloc(sizeof(frame));
+	void *upage = palloc_get_page(PAL_USER | PAL_ZERO);
+	if(upage == NULL) // null이면, panic
+	{
+		PANIC("not implemented!");
+	}
+	else
+	{
+		frame->kva = upage;
+		list_push_front(&frame_table, &frame->fram_elem);
+	}
 	ASSERT (frame != NULL);
 	ASSERT (frame->page == NULL);
 	return frame;
@@ -151,29 +174,57 @@ vm_dealloc_page (struct page *page) {
 /* Claim the page that allocate on VA. */
 bool
 vm_claim_page (void *va UNUSED) {
+	struct thread *curr = thread_current();
 	struct page *page = NULL;
 	/* TODO: Fill this function */
-
+	struct hash_elem *h = spt_find_page(&curr->spt, va);// 수정 필요 hash_find(&curr->spt, va);
+	page = hash_entry(h, struct page, page_elem);
+	if (page == NULL)
+	{
+		// 훗날의 내가
+	}
 	return vm_do_claim_page (page);
 }
 
 /* Claim the PAGE and set up the mmu. */
 static bool
 vm_do_claim_page (struct page *page) {
+	struct thread *curr = thread_current();
 	struct frame *frame = vm_get_frame ();
 
 	/* Set links */
 	frame->page = page;
 	page->frame = frame;
+	int tmp = 1;
 
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
-
+	// if anon, file은 디스크에서 꺼내와야하기 때문에 나중에
+	switch(page->operations->type)
+	{
+		case VM_UNINIT:
+			pml4_set_page(curr->pml4, page->va, frame->kva, tmp);
+			break;
+		// case VM_FILE:
+		// case VM_ANON:
+	}
 	return swap_in (page, frame->kva);
 }
 
+bool page_less_func (const struct hash_elem *a, const struct hash_elem *b, void *aux){
+	struct page *page_a = hash_entry(a, const struct page, page_elem);
+	struct page *page_b = hash_entry(b, const struct page, page_elem);
+	return page_a->va < page_b->va;
+}
+
+unsigned int hash_va(const struct hash_elem *p, void *aux UNUSED)
+{
+	struct page *page = hash_entry(p, struct page, page_elem);
+	return hash_int(page->va);
+}
 /* Initialize new supplemental page table */
 void
 supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
+	hash_init(&spt->spt_hash, hash_va, page_less_func, NULL);
 }
 
 /* Copy supplemental page table from src to dst */
