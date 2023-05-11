@@ -50,6 +50,7 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 	ASSERT(VM_TYPE(type) != VM_UNINIT)
 
 	struct supplemental_page_table *spt = &thread_current()->spt;
+	upage = pg_round_down(upage);
 
 	/* Check wheter the upage is already occupied or not. */
 	if (spt_find_page(spt, upage) == NULL)
@@ -58,7 +59,17 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 		 * TODO: and then create "uninit" page struct by calling uninit_new. You
 		 * TODO: should modify the field after calling the uninit_new. */
 		struct page *newpage = malloc(sizeof(struct page));
-		newpage->va = upage;
+		bool (*page_initializer)(struct page *, enum vm_type, void *kva);
+		switch (type)
+		{
+		case VM_ANON:
+			page_initializer = anon_initializer;
+			break;
+		case VM_FILE:
+			page_initializer = file_backed_initializer;
+			break;
+		}
+		uninit_new(newpage, upage, init, type, aux, page_initializer);
 
 		/* TODO: Insert the page into the spt. */
 		spt_insert_page(spt, newpage);
