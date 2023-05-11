@@ -827,9 +827,9 @@ lazy_load_segment(struct page *page, void *aux)
 	off_t ofs = ((struct aux*)aux)->ofs;
 	uint32_t read_bytes = ((struct aux*)aux)->read_bytes;
 	uint32_t zero_bytes = ((struct aux*)aux)->zero_bytes;
-
+  free(aux);
 	// if(file_read((void *)file, page, read_bytes) != (int)read_bytes)
-	if(file_read_at(file, page, read_bytes, ofs) != (int)read_bytes)
+	if(file_read(file, page, read_bytes) != (int)read_bytes)
 	{
 		return false;
 	}
@@ -859,7 +859,7 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 	ASSERT(pg_ofs(upage) == 0);
 	ASSERT(ofs % PGSIZE == 0);
 
-
+	file_seek(file, ofs);
 	while (read_bytes > 0 || zero_bytes > 0)
 	{
 		/* Do calculate how to fill this page.
