@@ -93,7 +93,6 @@ static uint64_t gdt[3] = {0, 0x00af9a000000ffff, 0x00cf92000000ffff};
    It is not safe to call thread_current() until this function
    finishes. */
 
-
 void thread_init(void)
 {
 	ASSERT(intr_get_level() == INTR_OFF);
@@ -123,7 +122,7 @@ void thread_init(void)
    Also creates the idle thread. */
 void thread_start(void)
 {
-	/* Create the idle thread. */ 
+	/* Create the idle thread. */
 	struct semaphore idle_started;
 	sema_init(&idle_started, 0);
 	thread_create("idle", PRI_MIN, idle, &idle_started);
@@ -179,24 +178,27 @@ void thread_print_stats(void)
    PRIORITY, but no actual priority scheduling is implemented.
    Priority scheduling is the goal of Problem 1-3. */
 
-bool cmp_thread_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
-    struct thread *st_a = list_entry(a, struct thread, elem);
-    struct thread *st_b = list_entry(b, struct thread, elem);
-    return st_a->priority > st_b->priority;
+bool cmp_thread_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
+{
+	struct thread *st_a = list_entry(a, struct thread, elem);
+	struct thread *st_b = list_entry(b, struct thread, elem);
+	return st_a->priority > st_b->priority;
 }
 
-void preempt_priority(void){
+void preempt_priority(void)
+{
 	// ASSERT(thread_current() != idle_thread);
 	// ASSERT(!list_empty(&ready_list))
 	if (thread_current() == idle_thread)
-			return;
+		return;
 	if (list_empty(&ready_list))
-			return;
+		return;
 	struct thread *cur = thread_current();
 	struct thread *first_ready = list_entry(list_front(&ready_list), struct thread, elem);
 
-	if(first_ready->priority > cur->priority){ // ready_list 첫번째 스레드가 현재 실행 스레드보다 우선순위가 높으면, 양보
-		thread_yield(); 
+	if (first_ready->priority > cur->priority)
+	{ // ready_list 첫번째 스레드가 현재 실행 스레드보다 우선순위가 높으면, 양보
+		thread_yield();
 	}
 }
 
@@ -228,9 +230,11 @@ tid_t thread_create(const char *name, int priority,
 	t->tf.cs = SEL_KCSEG;
 	t->tf.eflags = FLAG_IF;
 
-
+#ifdef VM
+	supplemental_page_table_init(&t->spt);
+#endif
 	t->fdt = palloc_get_multiple(PAL_ZERO, 3);
-	if(t->fdt == NULL)
+	if (t->fdt == NULL)
 	{
 		return TID_ERROR;
 	}
@@ -319,11 +323,11 @@ void thread_exit(void)
 #ifdef USERPROG
 	process_exit();
 #endif
-// struct thread *curr = thread_current();
-// /* 프로세스 디스크립터에 프로세스 종료를 알림 */
-// curr->terminated = true;
-// /* 부모프로세스의 대기 상태 이탈(세마포어 이용) */
-// sema_up(&(curr->exit_sema));
+	// struct thread *curr = thread_current();
+	// /* 프로세스 디스크립터에 프로세스 종료를 알림 */
+	// curr->terminated = true;
+	// /* 부모프로세스의 대기 상태 이탈(세마포어 이용) */
+	// sema_up(&(curr->exit_sema));
 	/* Just set our status to dying and schedule another process.
 	   We will be destroyed during the call to schedule_tail(). */
 	intr_disable();
@@ -536,7 +540,6 @@ init_thread(struct thread *t, const char *name, int priority)
 	sema_init(&t->exit_sema, 0);
 	sema_init(&t->wait_sema, 0);
 	list_init(&(t->child_list));
-
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
