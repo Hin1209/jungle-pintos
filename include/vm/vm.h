@@ -35,6 +35,7 @@ enum vm_type
 
 struct page_operations;
 struct thread;
+struct list frame_table;
 
 #define VM_TYPE(type) ((type)&7)
 
@@ -68,7 +69,7 @@ struct frame
 {
 	void *kva;
 	struct page *page;
-	struct hash_elem frame_elem;
+	struct list_elem frame_elem;
 };
 
 /* The function table for page operations.
@@ -94,6 +95,7 @@ struct page_operations
  * All designs up to you for this. */
 struct supplemental_page_table
 {
+	struct hash spt_hash;
 };
 
 #include "threads/thread.h"
