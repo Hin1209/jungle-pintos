@@ -16,6 +16,7 @@ void vm_init(void)
 	register_inspect_intr();
 	/* DO NOT MODIFY UPPER LINES. */
 	/* TODO: Your code goes here. */
+	list_init(&frame_table);
 }
 
 /* Get the type of the page. This function is useful if you want to know the
@@ -56,8 +57,11 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 		/* TODO: Create the page, fetch the initialier according to the VM type,
 		 * TODO: and then create "uninit" page struct by calling uninit_new. You
 		 * TODO: should modify the field after calling the uninit_new. */
+		struct page *newpage = malloc(sizeof(struct page));
+		newpage->va = upage;
 
 		/* TODO: Insert the page into the spt. */
+		spt_insert_page(spt, newpage);
 	}
 err:
 	return false;
@@ -69,6 +73,14 @@ spt_find_page(struct supplemental_page_table *spt UNUSED, void *va UNUSED)
 {
 	struct page *page = NULL;
 	/* TODO: Fill this function. */
+	struct page *tmp = malloc(sizeof(struct page));
+	tmp->va = va;
+	struct hash_elem *h = hash_find(&spt->spt_hash, &tmp->page_elem);
+	if (h == NULL)
+	{
+	}
+	page = hash_entry(h, struct page, page_elem);
+	free(tmp);
 
 	return page;
 }
@@ -79,7 +91,8 @@ bool spt_insert_page(struct supplemental_page_table *spt UNUSED,
 {
 	int succ = false;
 	/* TODO: Fill this function. */
-
+	if (hash_insert(spt, &page->page_elem) == NULL)
+		succ = true;
 	return succ;
 }
 
@@ -119,6 +132,15 @@ vm_get_frame(void)
 {
 	struct frame *frame = NULL;
 	/* TODO: Fill this function. */
+	frame = malloc(sizeof(struct frame));
+	void *upage = palloc_get_page(PAL_USER | PAL_ZERO);
+	if (upage == NULL)
+		PANIC("not implemented!"); // evict 구현
+	else
+	{
+		frame->kva = upage;
+		list_push_front(&frame_table, &frame->frame_elem);
+	}
 
 	ASSERT(frame != NULL);
 	ASSERT(frame->page == NULL);
@@ -160,8 +182,14 @@ void vm_dealloc_page(struct page *page)
 /* Claim the page that allocate on VA. */
 bool vm_claim_page(void *va UNUSED)
 {
+	struct thread *curr = thread_current();
 	struct page *page = NULL;
 	/* TODO: Fill this function */
+	struct hash_elem *h = spt_find_page(&curr->spt, va);
+	page = hash_entry(h, struct page, page_elem);
+	if (page == NULL)
+	{
+	}
 
 	return vm_do_claim_page(page);
 }
@@ -171,19 +199,41 @@ static bool
 vm_do_claim_page(struct page *page)
 {
 	struct frame *frame = vm_get_frame();
+	struct thread *curr = thread_current();
 
 	/* Set links */
 	frame->page = page;
 	page->frame = frame;
+	int tmp = 1;
 
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
+	switch (page->operations->type)
+	{
+	case VM_UNINIT:
+		pml4_set_page(curr->pml4, page->va, frame->kva, tmp);
+		break;
+	}
 
 	return swap_in(page, frame->kva);
 }
 
 /* Initialize new supplemental page table */
+bool hash_page_less(const struct hash_elem *a, const struct hash_elem *b, void *aux)
+{
+	struct page *page_a = hash_entry(a, struct page, page_elem);
+	struct page *page_b = hash_entry(b, struct page, page_elem);
+	return page_a->va < page_b->va;
+}
+
+unsigned int hash_va(const struct hash_elem *p, void *aux UNUSED)
+{
+	struct page *page = hash_entry(p, struct page, page_elem);
+	return hash_int(page->va);
+}
+
 void supplemental_page_table_init(struct supplemental_page_table *spt UNUSED)
 {
+	hash_init(&spt->spt_hash, hash_va, hash_page_less, NULL);
 }
 
 /* Copy supplemental page table from src to dst */
