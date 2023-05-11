@@ -3,6 +3,8 @@
 #include "threads/malloc.h"
 #include "vm/vm.h"
 #include "vm/inspect.h"
+#include "threads/vaddr.h"
+#include "threads/mmu.h"
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
@@ -49,13 +51,25 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 	ASSERT (VM_TYPE(type) != VM_UNINIT)
 
 	struct supplemental_page_table *spt = &thread_current ()->spt;
-
+	upage = pg_round_down(upage);
 	/* Check wheter the upage is already occupied or not. */
 	if (spt_find_page (spt, upage) == NULL) {
-		/* TODO: Create the page, fetch the initialier according to the VM type,
-		 * TODO: and then create "uninit" page struct by calling uninit_new. You
-		 * TODO: should modify the field after calling the uninit_new. */
-
+		struct page *newpage = calloc(1, sizeof(struct page));
+		bool (*page_initializer)(struct page*, enum vm_type, void *kva);
+		switch(type)
+		{
+			case VM_ANON:
+			page_initializer = anon_initializer;
+			break;
+			case VM_FILE:
+			page_initializer = file_backed_initializer;
+			break;
+		}
+		uninit_new(newpage, upage, init, type, aux, page_initializer);
+		newpage->writable = writable;
+		newpage->va = upage;
+		spt_insert_page(spt, newpage);
+		return true;
 		/* TODO: Insert the page into the spt. */
 	}
 err:
@@ -67,15 +81,14 @@ struct page *
 spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 	struct page *page = NULL;
 	/* TODO: Fill this function. */
-	struct page *tmp = malloc(sizeof(struct page));
-	tmp->va = va;
-	struct hash_elem *h = hash_find(&spt->spt_hash, &tmp->page_elem);
+	struct page tmp;
+	tmp.va = va;
+	struct hash_elem *h = hash_find(&spt->spt_hash, &(tmp.page_elem));
 	if(h==NULL)
 	{
-
+			return NULL;
 	}
-	page = hash_entry(h, struct page, page_elem);
-	free(tmp);
+	page = hash_entry(h, struct page, page_elem); 
 	return page;
 }
 
@@ -123,9 +136,8 @@ vm_evict_frame (void) {
 static struct frame *
 vm_get_frame (void) {
 	struct frame *frame = NULL;
-	/* TODO: Fill this function. */
-  // palloc으로 프레임 할당
-  frame = malloc(sizeof(frame));
+
+  frame = calloc(1, sizeof(frame));
 	void *upage = palloc_get_page(PAL_USER | PAL_ZERO);
 	if(upage == NULL) // null이면, panic
 	{
@@ -133,8 +145,9 @@ vm_get_frame (void) {
 	}
 	else
 	{
+		frame->page = NULL;
 		frame->kva = upage;
-		list_push_front(&frame_table, &frame->fram_elem);
+		list_push_back(&frame_table, &frame->fram_elem);
 	}
 	ASSERT (frame != NULL);
 	ASSERT (frame->page == NULL);
@@ -159,7 +172,12 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	struct page *page = NULL;
 	/* TODO: Validate the fault */
 	/* TODO: Your code goes here */
-
+  // 유효한 페이지 오류인지 확인
+	page = spt_find_page(spt, addr);
+	if(page == 	NULL)
+	{
+		exit(-1);
+	}
 	return vm_do_claim_page (page);
 }
 
@@ -195,17 +213,17 @@ vm_do_claim_page (struct page *page) {
 	/* Set links */
 	frame->page = page;
 	page->frame = frame;
-	int tmp = 1;
 
-	/* TODO: Insert page table entry to map page's VA to frame's PA. */
 	// if anon, file은 디스크에서 꺼내와야하기 때문에 나중에
 	switch(page->operations->type)
 	{
 		case VM_UNINIT:
-			pml4_set_page(curr->pml4, page->va, frame->kva, tmp);
+			pml4_set_page(curr->pml4, page->va, frame->kva, page->writable);
 			break;
-		// case VM_FILE:
-		// case VM_ANON:
+		case VM_FILE:
+			break;
+		case VM_ANON:
+			break;
 	}
 	return swap_in (page, frame->kva);
 }

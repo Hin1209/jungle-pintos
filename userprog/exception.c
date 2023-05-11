@@ -5,6 +5,7 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "intrinsic.h"
+#include "vm/vm.h"
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -141,18 +142,16 @@ page_fault(struct intr_frame *f)
 	not_present = (f->error_code & PF_P) == 0;
 	write = (f->error_code & PF_W) != 0;
 	user = (f->error_code & PF_U) != 0;
-	/* page fault 발생시 exit(-1) 호춝 */
-	exit(-1);
 #ifdef VM
 	/* For project 3 and later. */
-	if (vm_try_handle_fault(f, fault_addr, user, write, not_present))
+	if (vm_try_handle_fault(f, pg_round_down(fault_addr), user, write, not_present))
 		return;
 #endif
 
 	/* Count page faults. */
 	page_fault_cnt++;
-
 	/* If the fault is true fault, show info and exit. */
+	//vm_try_handle_fault(f, pg_round_down(fault_addr), user, write, not_present);
 	printf("Page fault at %p: %s error %s page in %s context.\n",
 		   fault_addr,
 		   not_present ? "not present" : "rights violation",

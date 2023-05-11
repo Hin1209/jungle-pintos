@@ -5,6 +5,9 @@ struct page;
 enum vm_type;
 
 struct anon_page {
+  void *aux;
+  // disk로 쫓겨난 위치
+  
 };
 
 void vm_anon_init (void);

@@ -229,7 +229,9 @@ tid_t thread_create(const char *name, int priority,
 	t->tf.ss = SEL_KDSEG;
 	t->tf.cs = SEL_KCSEG;
 	t->tf.eflags = FLAG_IF;
-
+#ifdef VM
+	supplemental_page_table_init(&t->spt);
+#endif
 	t->fdt = palloc_get_multiple(PAL_ZERO, 3);
 	if (t->fdt == NULL)
 	{
