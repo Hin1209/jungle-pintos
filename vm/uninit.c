@@ -66,4 +66,5 @@ uninit_destroy(struct page *page)
 	struct uninit_page *uninit UNUSED = &page->uninit;
 	/* TODO: Fill this function.
 	 * TODO: If you don't have anything to do, just return. */
+	hash_delete(&(thread_current()->spt.spt_hash), &page->page_elem);
 }

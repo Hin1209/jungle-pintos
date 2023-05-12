@@ -52,28 +52,38 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 	ASSERT(VM_TYPE(type) != VM_UNINIT)
 
 	struct supplemental_page_table *spt = &thread_current()->spt;
+	struct page *exist_page;
 	upage = pg_round_down(upage);
 	/* Check wheter the upage is already occupied or not. */
-	if (spt_find_page(spt, upage) == NULL)
+	bool (*page_initializer)(struct page *, enum vm_type, void *kva);
+	switch (type)
+	{
+	case VM_ANON:
+		page_initializer = anon_initializer;
+		break;
+	case VM_FILE:
+		page_initializer = file_backed_initializer;
+		break;
+	}
+	if ((exist_page = spt_find_page(spt, upage)) == NULL)
 	{
 		/* TODO: Create the page, fetch the initialier according to the VM type,
 		 * TODO: and then create "uninit" page struct by calling uninit_new. You
 		 * TODO: should modify the field after calling the uninit_new. */
 		struct page *newpage = calloc(1, sizeof(struct page));
-		bool (*page_initializer)(struct page *, enum vm_type, void *kva);
-		switch (type)
-		{
-		case VM_ANON:
-			page_initializer = anon_initializer;
-			break;
-		case VM_FILE:
-			page_initializer = file_backed_initializer;
-			break;
-		}
 		newpage->writable = writable;
 		uninit_new(newpage, upage, init, type, aux, page_initializer);
 
 		/* TODO: Insert the page into the spt. */
+		spt_insert_page(spt, newpage);
+		return true;
+	}
+	else
+	{
+		vm_dealloc_page(exist_page);
+		struct page *newpage = calloc(1, sizeof(struct page));
+		newpage->writable = writable;
+		uninit_new(newpage, upage, init, type, aux, page_initializer);
 		spt_insert_page(spt, newpage);
 		return true;
 	}
@@ -277,9 +287,11 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 		struct page *page = hash_entry(hash_cur(&i), struct page, page_elem);
 		struct page *newpage = malloc(sizeof(struct page));
 		memcpy(newpage, page, sizeof(struct page));
-		vm_do_claim_page(newpage);
-		if (page_get_type(page) != VM_UNINIT)
+		if (page->operations->type != VM_UNINIT)
+		{
+			vm_do_claim_page(newpage);
 			memcpy(newpage->va, page->frame->kva, PGSIZE);
+		}
 		spt_insert_page(dst, newpage);
 	}
 	return true;
