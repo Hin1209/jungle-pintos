@@ -104,7 +104,7 @@ bool spt_insert_page(struct supplemental_page_table *spt UNUSED,
 					 struct page *page UNUSED)
 {
 	int succ = false;
-	if (hash_insert(spt, &page->page_elem) == NULL)
+	if (hash_insert(&spt->spt_hash, &page->page_elem) == NULL)
 		succ = true;
 	return succ;
 }
@@ -209,6 +209,16 @@ bool vm_claim_page(void *va UNUSED)
 	return vm_do_claim_page(page);
 }
 
+static bool
+install_page(void *upage, void *kpage, bool writable)
+{
+	struct thread *t = thread_current();
+
+	/* Verify that there's not already a page at that virtual
+	 * address, then map our page there. */
+	return (pml4_get_page(t->pml4, upage) == NULL && pml4_set_page(t->pml4, upage, kpage, writable));
+}
+
 /* Claim the PAGE and set up the mmu. */
 static bool
 vm_do_claim_page(struct page *page)
@@ -223,9 +233,12 @@ vm_do_claim_page(struct page *page)
 	switch (page->operations->type)
 	{
 	case VM_UNINIT:
-		pml4_set_page(curr->pml4, page->va, frame->kva, page->writable);
+		if (!install_page(page->va, frame->kva, 1))
+			PANIC("FAIL");
 		break;
 	case VM_ANON:
+		if (!install_page(page->va, frame->kva, 1))
+			PANIC("FAIL");
 		break;
 	case VM_FILE:
 		break;
@@ -245,7 +258,7 @@ bool hash_page_less(const struct hash_elem *a, const struct hash_elem *b, void *
 unsigned int hash_va(const struct hash_elem *p, void *aux UNUSED)
 {
 	struct page *page = hash_entry(p, struct page, page_elem);
-	return hash_int(page->va);
+	return hash_bytes(&page->va, sizeof(page->va));
 }
 
 void supplemental_page_table_init(struct supplemental_page_table *spt UNUSED)
@@ -257,6 +270,19 @@ void supplemental_page_table_init(struct supplemental_page_table *spt UNUSED)
 bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 								  struct supplemental_page_table *src UNUSED)
 {
+	struct hash_iterator i;
+	hash_first(&i, &src->spt_hash);
+	while (hash_next(&i))
+	{
+		struct page *page = hash_entry(hash_cur(&i), struct page, page_elem);
+		struct page *newpage = malloc(sizeof(struct page));
+		memcpy(newpage, page, sizeof(struct page));
+		vm_do_claim_page(newpage);
+		if (page_get_type(page) != VM_UNINIT)
+			memcpy(newpage->va, page->frame->kva, PGSIZE);
+		spt_insert_page(dst, newpage);
+	}
+	return true;
 }
 
 /* Free the resource hold by the supplemental page table */

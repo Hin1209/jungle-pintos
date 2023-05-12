@@ -573,10 +573,8 @@ load(const char *file_name, struct intr_frame *if_)
 		if (file_ofs < 0 || file_ofs > file_length(file))
 			goto done;
 		file_seek(file, file_ofs);
-
 		if (file_read(file, &phdr, sizeof phdr) != sizeof phdr)
 			goto done;
-		printf("phdr: %d\n", sizeof phdr);
 		file_ofs += sizeof phdr;
 		switch (phdr.p_type)
 		{
@@ -613,7 +611,6 @@ load(const char *file_name, struct intr_frame *if_)
 					read_bytes = 0;
 					zero_bytes = ROUND_UP(page_offset + phdr.p_memsz, PGSIZE);
 				}
-				printf("file offs: %x\n", file_page);
 				if (!load_segment(file, file_page, (void *)mem_page,
 								  read_bytes, zero_bytes, writable))
 					goto done;
@@ -735,6 +732,7 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 			return false;
 
 		/* Load this page. */
+		// printf("file tell: %d\n", file_tell(file));
 		if (file_read(file, kpage, page_read_bytes) != (int)page_read_bytes)
 		{
 			palloc_free_page(kpage);
@@ -820,12 +818,13 @@ lazy_load_segment(struct page *page, void *aux)
 	uint32_t zero_bytes = ((struct load *)aux)->zero_bytes;
 	free(aux);
 
-	if (file_read(file, page, read_bytes) != (int)read_bytes)
+	file_seek(file, ofs);
+	if (read_bytes > 0 && file_read(file, page->va, read_bytes) != (int)read_bytes)
 	{
 		// error handle
 		return false;
 	}
-	memset(page + read_bytes, 0, zero_bytes);
+	memset(page->va + read_bytes, 0, zero_bytes);
 	return true;
 }
 
@@ -861,7 +860,7 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
 		/* TODO: Set up aux to pass information to the lazy_load_segment. */
-		struct load *aux = malloc(sizeof(struct load));
+		struct load *aux = calloc(1, sizeof(struct load));
 		aux->file = file;
 		aux->ofs = ofs;
 		aux->read_bytes = page_read_bytes;
@@ -875,7 +874,7 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		read_bytes -= page_read_bytes;
 		zero_bytes -= page_zero_bytes;
 		upage += PGSIZE;
-		ofs += PGSIZE;
+		ofs += page_read_bytes;
 	}
 	return true;
 }
