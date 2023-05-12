@@ -104,7 +104,7 @@ bool spt_insert_page(struct supplemental_page_table *spt UNUSED,
 					 struct page *page UNUSED)
 {
 	int succ = false;
-	if (hash_insert(spt, &page->page_elem) == NULL)
+	if (hash_insert(&spt->spt_hash, &page->page_elem) == NULL)
 		succ = true;
 	return succ;
 }
@@ -209,6 +209,16 @@ bool vm_claim_page(void *va UNUSED)
 	return vm_do_claim_page(page);
 }
 
+static bool
+install_page(void *upage, void *kpage, bool writable)
+{
+	struct thread *t = thread_current();
+
+	/* Verify that there's not already a page at that virtual
+	 * address, then map our page there. */
+	return (pml4_get_page(t->pml4, upage) == NULL && pml4_set_page(t->pml4, upage, kpage, writable));
+}
+
 /* Claim the PAGE and set up the mmu. */
 static bool
 vm_do_claim_page(struct page *page)
@@ -223,7 +233,8 @@ vm_do_claim_page(struct page *page)
 	switch (page->operations->type)
 	{
 	case VM_UNINIT:
-		pml4_set_page(curr->pml4, page->va, frame->kva, page->writable);
+		if (!install_page(page->va, frame->kva, 1))
+			PANIC("FAIL");
 		break;
 	case VM_ANON:
 		break;
@@ -245,7 +256,7 @@ bool hash_page_less(const struct hash_elem *a, const struct hash_elem *b, void *
 unsigned int hash_va(const struct hash_elem *p, void *aux UNUSED)
 {
 	struct page *page = hash_entry(p, struct page, page_elem);
-	return hash_int(page->va);
+	return hash_bytes(&page->va, sizeof(page->va));
 }
 
 void supplemental_page_table_init(struct supplemental_page_table *spt UNUSED)
