@@ -104,6 +104,7 @@ struct thread
 	struct list_elem donation_elem;
 
 	struct intr_frame parent_if;
+	uint64_t user_rsp;
 
 	struct list child_list;		 /* 자식 프로세스 리스트 */
 	struct list_elem child_elem; /* 자식 리스트 엘리먼트 */
