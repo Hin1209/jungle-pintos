@@ -73,6 +73,12 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 		struct page *newpage = calloc(1, sizeof(struct page));
 		newpage->writable = writable;
 		uninit_new(newpage, upage, init, type, aux, page_initializer);
+		if (aux != NULL)
+		{
+			memcpy(&(newpage->running_file), aux, sizeof(struct file *));
+			memcpy(&(newpage->ofs), (aux + 8), sizeof(int));
+			memcpy(&(newpage->read_bytes), (aux + 12), sizeof(int));
+		}
 
 		/* TODO: Insert the page into the spt. */
 		spt_insert_page(spt, newpage);
