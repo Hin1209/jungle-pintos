@@ -237,6 +237,8 @@ vm_do_claim_page(struct page *page)
 			PANIC("FAIL");
 		break;
 	case VM_ANON:
+		if (!install_page(page->va, frame->kva, 1))
+			PANIC("FAIL");
 		break;
 	case VM_FILE:
 		break;
@@ -268,6 +270,19 @@ void supplemental_page_table_init(struct supplemental_page_table *spt UNUSED)
 bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 								  struct supplemental_page_table *src UNUSED)
 {
+	struct hash_iterator i;
+	hash_first(&i, &src->spt_hash);
+	while (hash_next(&i))
+	{
+		struct page *page = hash_entry(hash_cur(&i), struct page, page_elem);
+		struct page *newpage = malloc(sizeof(struct page));
+		memcpy(newpage, page, sizeof(struct page));
+		vm_do_claim_page(newpage);
+		if (page_get_type(page) != VM_UNINIT)
+			memcpy(newpage->va, page->frame->kva, PGSIZE);
+		spt_insert_page(dst, newpage);
+	}
+	return true;
 }
 
 /* Free the resource hold by the supplemental page table */
