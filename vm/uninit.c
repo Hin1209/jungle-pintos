@@ -60,6 +60,9 @@ uninit_initialize(struct page *page, void *kva)
  * to other page objects, it is possible to have uninit pages when the process
  * exit, which are never referenced during the execution.
  * PAGE will be freed by the caller. */
+/* uninit_page가 보유한 리소스를 해제합니다. 대부분의 페이지는 다른 페이지 객체로 변환되었지만,
+프로세스가 종료될 때 실행 중에 참조되지 않는 초기화되지 않은 페이지가 있는 경우가 있을 수 있습니다.
+PAGE는 호출자에 의해 해제될 것입니다. */
 static void
 uninit_destroy(struct page *page)
 {

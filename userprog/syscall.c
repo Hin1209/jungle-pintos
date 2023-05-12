@@ -142,7 +142,7 @@ syscall_handler (struct intr_frame *f UNUSED) {
 void check_address(void *addr)
 {
 	struct thread *curr = thread_current();
-	if (addr == NULL || !(is_user_vaddr(addr)) || pml4_get_page(curr->pml4, addr) == NULL)
+	if (addr == NULL || !(is_user_vaddr(addr)))
 	{
 		// 주소가 null이 아니고, 커널 스택의 주소 아니고, 해당 가상 주소에 대한 PTE가 존재할 때만 시스템 콜을 호출할 자격이 있는 포인터다.
 		exit(-1);

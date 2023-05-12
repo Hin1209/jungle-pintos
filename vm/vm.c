@@ -6,6 +6,16 @@
 #include "vm/vm.h"
 #include "vm/inspect.h"
 
+static bool
+install_page(void *upage, void *kpage, bool writable)
+{
+	struct thread *t = thread_current();
+
+	/* Verify that there's not already a page at that virtual
+	 * address, then map our page there. */
+	return (pml4_get_page(t->pml4, upage) == NULL && pml4_set_page(t->pml4, upage, kpage, writable));
+}
+
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
 void vm_init(void)
@@ -223,9 +233,12 @@ vm_do_claim_page(struct page *page)
 	switch (page->operations->type)
 	{
 	case VM_UNINIT:
-		pml4_set_page(curr->pml4, page->va, frame->kva, 1);
+		if (!install_page(page->va, frame->kva, 1))
+			PANIC("FAIL");
 		break;
 	case VM_ANON:
+		if (!install_page(page->va, frame->kva, 1))
+			PANIC("FAIL");
 		break;
 	case VM_FILE:
 		break;
@@ -253,15 +266,37 @@ void supplemental_page_table_init(struct supplemental_page_table *spt UNUSED)
 	hash_init(&spt->spt_hash, hash_va, hash_page_less, NULL);
 }
 
-/* Copy supplemental page table from src to dst */
+/* Copy supplemental page table from src to dst */ //src: 부모  dst: 자식
 bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 								  struct supplemental_page_table *src UNUSED)
 {
+	struct hash_iterator i;
+	hash_first(&i, &src->spt_hash);
+	while (hash_next(&i))
+	{
+		struct page *page = hash_entry(hash_cur(&i), struct page, page_elem);
+		struct page *newpage = malloc(sizeof(struct page));
+		memcpy(newpage, page, sizeof(struct page));
+		vm_do_claim_page(newpage);
+		if (page_get_type(page) != VM_UNINIT)
+			memcpy(newpage->va, page->frame->kva, PGSIZE);
+		spt_insert_page(dst, newpage);
+	}
+	return true;  
 }
+//	supplemental_page_table_init(&current->spt);
+//	if (!(&current->spt, &parent->spt))
+//		goto error;
+
 
 /* Free the resource hold by the supplemental page table */
+// supplemental page table에 의해 유지되던 모든 자원들을 free합니다. 
 void supplemental_page_table_kill(struct supplemental_page_table *spt UNUSED)
 {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
+	//supplemental page table에 의해 유지되던 모든 자원들을 free합니다.
+	//이 함수는 process가 exit할 때(userprog/process.c의 process_exit()) 호출됩니다.
+	// 당신은 페이지 엔트리를 반복하면서 테이블의 페이지에 destroy(page)를 호출하여야 합니다.
+	//당신은 이 함수에서 실제 페이지 테이블(pml4)와 물리 주소(palloc된 메모리)에 대해 걱정할 필요가 없습니다. supplemental page table이 정리되어지고 나서, 호출자가 그것들을 정리할 것입니다.
 }
