@@ -180,6 +180,10 @@ vm_get_frame(void)
 static void
 vm_stack_growth(void *addr UNUSED)
 {
+	struct page *newpage = calloc(1, sizeof(struct page));
+	uninit_new(newpage, pg_round_down(addr), NULL, VM_ANON, NULL, anon_initializer);
+	spt_insert_page(&thread_current()->spt, newpage);
+	vm_do_claim_page(newpage);
 }
 
 /* Handle the fault on write_protected page */
@@ -194,9 +198,14 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 {
 	struct supplemental_page_table *spt UNUSED = &thread_current()->spt;
 	struct page *page = NULL;
-	/* TODO: Validate the fault */
-	/* TODO: Your code goes here */
-	page = spt_find_page(spt, addr);
+	uint64_t user_rsp = thread_current()->user_rsp;
+	if (user_rsp - 8 == addr || pg_round_down(user_rsp) == pg_round_down(addr) || (user_rsp < addr && addr < USER_STACK))
+	{
+		vm_stack_growth(addr);
+		return true;
+	}
+
+	page = spt_find_page(spt, pg_round_down(addr));
 	if (page == NULL)
 		exit(-1);
 
@@ -215,9 +224,7 @@ void vm_dealloc_page(struct page *page)
 bool vm_claim_page(void *va UNUSED)
 {
 	struct thread *curr = thread_current();
-	struct page *page = NULL;
-	struct hash_elem *h = spt_find_page(&curr->spt, va);
-	page = hash_entry(h, struct page, page_elem);
+	struct page *page = spt_find_page(&curr->spt, va);
 	if (page == NULL)
 	{
 	}

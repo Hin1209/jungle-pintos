@@ -61,8 +61,8 @@ void syscall_init(void)
 /* The main system call interface */
 void syscall_handler(struct intr_frame *f UNUSED)
 {
-	// TODO: Your implementation goes here.
 	uint32_t *sp = f->rsp; /* 유저 스택 포인터 */
+	thread_current()->user_rsp = f->rsp;
 	check_address((void *)sp);
 
 	char *fn_copy;
@@ -71,68 +71,49 @@ void syscall_handler(struct intr_frame *f UNUSED)
 	switch (a)
 	{
 	case SYS_HALT:
-		// printf("halt!\n");
 		halt();
 		break;
 	case SYS_EXIT:
-		// printf("exit!\n");
 		exit(f->R.rdi);
 		break;
 	case SYS_FORK:
-		// printf("fork!\n");
 		f->R.rax = fork(f->R.rdi, f);
 		break;
 	case SYS_EXEC:
-		// printf("exec!\n");
 		if (exec(f->R.rdi) == -1)
 			exit(-1);
 		break;
 	case SYS_WAIT:
-		// printf("wait!\n");
 		f->R.rax = process_wait(f->R.rdi);
 		break;
 	case SYS_CREATE:
-		// printf("create!\n");
 		f->R.rax = create(f->R.rdi, f->R.rsi);
 		break;
 	case SYS_REMOVE:
-		// printf("remove!\n");
 		f->R.rax = remove(f->R.rdi);
 		break;
 	case SYS_OPEN:
-		// printf("open!\n");
 		f->R.rax = open(f->R.rdi);
 		break;
 	case SYS_FILESIZE:
-		// printf("filesize!\n");
 		f->R.rax = filesize(f->R.rdi);
 		break;
 	case SYS_READ:
-		// printf("read!\n");
 		f->R.rax = read(f->R.rdi, f->R.rsi, f->R.rdx);
 		break;
 	case SYS_WRITE:
-		// printf("write!\n");
 		f->R.rax = write(f->R.rdi, f->R.rsi, f->R.rdx);
 		break;
 	case SYS_SEEK:
-		// printf("seek!\n");
 		seek(f->R.rdi, f->R.rsi);
 		break;
 	case SYS_TELL:
-		// printf("tell!\n");
 		f->R.rax = tell(f->R.rdi);
 		break;
 	case SYS_CLOSE:
-		// printf("close!\n");
 		close(f->R.rdi);
 		break;
-	// case SYS_DUP2:
-	// 	printf("dup2!\n");
-	// 	// f->R.rax = dup2(f->R.rdi, f->R.rsi);
-	// 	break;
 	default:
-		// printf("default exit!\n");
 		exit(-1);
 		break;
 	}
