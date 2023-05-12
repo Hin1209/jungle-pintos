@@ -62,29 +62,42 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 	ASSERT(VM_TYPE(type) != VM_UNINIT)
 
 	struct supplemental_page_table *spt = &thread_current()->spt; //현재 실행 중인 스레드의 보조 페이지 테이블
+	struct page *exist_page;
 	upage = pg_round_down(upage);
 	/* Check wheter the upage is already occupied or not. */
-	if (spt_find_page(spt, upage) == NULL)
+	bool (*page_initializer)(struct page *, enum vm_type, void *kva);
+	switch (type)
 	{
-		/* TODO: Create the page, fetch the initialier according to the VM type,
-		 * TODO: and then create "uninit" page struct by calling uninit_new. You
-		 * TODO: should modify the field after calling the uninit_new. */
-		struct page *newpage = calloc(1, sizeof(struct page));
-		bool (*page_initializer)(struct page *, enum vm_type, void *kva);
-		switch (type)
-		{
 		case VM_ANON:
 			page_initializer = anon_initializer;
 			break;
 		case VM_FILE:
 			page_initializer = file_backed_initializer;
 			break;
-		}
+	}
+	if ((exist_page = spt_find_page(spt, upage)) == NULL)
+	{
+		/* TODO: Create the page, fetch the initialier according to the VM type,
+		 * TODO: and then create "uninit" page struct by calling uninit_new. You
+		 * TODO: should modify the field after calling the uninit_new. */
+		struct page *newpage = calloc(1, sizeof(struct page));
 		newpage->writable = writable;
 		uninit_new(newpage, upage, init, type, aux, page_initializer);
 
 		/* TODO: Insert the page into the spt. */
 		spt_insert_page(spt, newpage);
+		return true;
+	} else {
+		vm_dealloc_page(exist_page);
+		struct page *newpage = calloc(1, sizeof(struct page));
+		newpage->writable = writable;
+		uninit_new(newpage, upage, init, type, aux, page_initializer);
+		spt_insert_page(spt, newpage);
+		// if (exist_page->operations->type == VM_ANON) {
+		// 	pml4_clear_page(thread_current()->pml4, exist_page->va);
+
+		// }
+		// uninit_new(exist_page, upage, init, type, aux, page_initializer);
 		return true;
 	}
 err:
@@ -278,7 +291,7 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 		struct page *newpage = malloc(sizeof(struct page));
 		memcpy(newpage, page, sizeof(struct page));
 		vm_do_claim_page(newpage);
-		if (page_get_type(page) != VM_UNINIT)
+		if (page->operations->type != VM_UNINIT)
 			memcpy(newpage->va, page->frame->kva, PGSIZE);
 		spt_insert_page(dst, newpage);
 	}
@@ -293,10 +306,14 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 // supplemental page table에 의해 유지되던 모든 자원들을 free합니다. 
 void supplemental_page_table_kill(struct supplemental_page_table *spt UNUSED)
 {
-	/* TODO: Destroy all the supplemental_page_table hold by thread and
-	 * TODO: writeback all the modified contents to the storage. */
-	//supplemental page table에 의해 유지되던 모든 자원들을 free합니다.
-	//이 함수는 process가 exit할 때(userprog/process.c의 process_exit()) 호출됩니다.
-	// 당신은 페이지 엔트리를 반복하면서 테이블의 페이지에 destroy(page)를 호출하여야 합니다.
-	//당신은 이 함수에서 실제 페이지 테이블(pml4)와 물리 주소(palloc된 메모리)에 대해 걱정할 필요가 없습니다. supplemental page table이 정리되어지고 나서, 호출자가 그것들을 정리할 것입니다.
+	struct hash_iterator i;
+	struct page *de_page = NULL;
+	hash_first(&i, &spt->spt_hash);
+	while (hash_next(&i))
+	{
+		if (de_page != NULL)
+			vm_dealloc_page(de_page);
+		de_page = hash_entry(hash_cur(&i), struct page, page_elem);
+	}
+	return true;   
 }

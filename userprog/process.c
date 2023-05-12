@@ -209,6 +209,9 @@ tid_t process_fork(const char *name, struct intr_frame *if_ UNUSED)
 
 	struct thread *child = get_child_process(tid);
 	sema_down(&child->load_sema); // 자식 프로세스가 종료될 떄까지 잠이 든다.
+	if (child->exit_status == -1) {
+		return TID_ERROR;
+	}
 
 	return tid;
 }
@@ -299,33 +302,40 @@ __do_fork(void *aux)
 	 * TODO:       in include/filesys/file.h. Note that parent should not return
 	 * TODO:       from the fork() until this function successfully duplicates
 	 * TODO:       the resources of parent.*/
-	// FDT복사
-	for (int i = 0; i < 128; i++)
-	{
+	// FDT복사 next_fd  fdt
+	if (parent->next_fd == FDCOUNT_LIMIT)
+		goto error;
+	//process_init ();
+	for (int i = 0; i < FDCOUNT_LIMIT; i++) {
 		struct file *file = parent->fdt[i];
 		if (file == NULL)
-		{
 			continue;
+		
+		bool found = false;
+		if (!found) {
+			struct file *new_file;
+			if (file > 2) {
+				new_file = file_duplicate(file);
+			} else {
+				new_file = file;
+			}
+			current->fdt[i] = new_file;
 		}
-		if (file > 2)
-		{
-			file = file_duplicate(file);
-		}
-		current->fdt[i] = file;
 	}
 	current->next_fd = parent->next_fd;
-
-	// 로드가 완료될 때까지 기다리고 있던 부모 대기 해제
+	// child loaded successfully, wake up parent in process_fork
 	sema_up(&current->load_sema);
-	process_init();
 
 	/* Finally, switch to the newly created process. */
 	if (succ)
-		do_iret(&if_);
+		do_iret (&if_);
 error:
+	//thread_exit ();
+	current->exit_status = TID_ERROR;
 	sema_up(&current->load_sema);
 	exit(TID_ERROR);
 }
+
 
 /* Switch the current execution context to the f_name.
  * Returns -1 on fail. */
@@ -815,7 +825,7 @@ lazy_load_segment(struct page *page, void *aux)
 	off_t ofs = ((struct load *)aux)->ofs;
 	uint32_t read_bytes = ((struct load *)aux)->read_bytes;
 	uint32_t zero_bytes = ((struct load *)aux)->zero_bytes;
-	free(aux);
+	//free(aux);
 	file_seek(file, ofs);
 
 	if (read_bytes > 0 && file_read(file, page->va, read_bytes) != (int)read_bytes)
