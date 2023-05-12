@@ -816,10 +816,9 @@ lazy_load_segment(struct page *page, void *aux)
 	off_t ofs = ((struct load *)aux)->ofs;
 	uint32_t read_bytes = ((struct load *)aux)->read_bytes;
 	uint32_t zero_bytes = ((struct load *)aux)->zero_bytes;
-	free(aux);
 
 	file_seek(file, ofs);
-	if (read_bytes > 0 && file_read(file, page->va, read_bytes) != (int)read_bytes)
+	if (file_read(file, page->va, read_bytes) != (int)read_bytes)
 	{
 		// error handle
 		return false;
