@@ -51,7 +51,7 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 
 	ASSERT(VM_TYPE(type) != VM_UNINIT)
 
-	struct supplemental_page_table *spt = &thread_current()->spt;
+	struct supplemental_page_table *spt = &thread_current()->spt; //현재 실행 중인 스레드의 보조 페이지 테이블
 	upage = pg_round_down(upage);
 	/* Check wheter the upage is already occupied or not. */
 	if (spt_find_page(spt, upage) == NULL)
@@ -104,7 +104,7 @@ bool spt_insert_page(struct supplemental_page_table *spt UNUSED,
 					 struct page *page UNUSED)
 {
 	int succ = false;
-	if (hash_insert(spt, &page->page_elem) == NULL)
+	if (hash_insert(&spt->spt_hash, &page->page_elem) == NULL)
 		succ = true;
 	return succ;
 }
@@ -223,7 +223,7 @@ vm_do_claim_page(struct page *page)
 	switch (page->operations->type)
 	{
 	case VM_UNINIT:
-		pml4_set_page(curr->pml4, page->va, frame->kva, page->writable);
+		pml4_set_page(curr->pml4, page->va, frame->kva, 1);
 		break;
 	case VM_ANON:
 		break;
@@ -245,7 +245,7 @@ bool hash_page_less(const struct hash_elem *a, const struct hash_elem *b, void *
 unsigned int hash_va(const struct hash_elem *p, void *aux UNUSED)
 {
 	struct page *page = hash_entry(p, struct page, page_elem);
-	return hash_int(page->va);
+	return hash_bytes(&page->va, sizeof(page->va));
 }
 
 void supplemental_page_table_init(struct supplemental_page_table *spt UNUSED)
