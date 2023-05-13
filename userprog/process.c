@@ -424,6 +424,7 @@ void process_exit(void)
 	palloc_free_multiple(curr->fdt, 3);
 	file_close(curr->running);
 	process_cleanup();
+	hash_destroy(&curr->spt.spt_hash, NULL);
 	sema_up(&curr->wait_sema);
 	sema_down(&curr->exit_sema);
 }

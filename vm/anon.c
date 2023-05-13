@@ -54,5 +54,4 @@ static void
 anon_destroy(struct page *page)
 {
 	struct anon_page *anon_page = &page->anon;
-	hash_delete(&(thread_current()->spt.spt_hash), &page->page_elem);
 }
