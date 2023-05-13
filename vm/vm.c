@@ -71,8 +71,8 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 		 * TODO: and then create "uninit" page struct by calling uninit_new. You
 		 * TODO: should modify the field after calling the uninit_new. */
 		struct page *newpage = calloc(1, sizeof(struct page));
-		newpage->writable = writable;
 		uninit_new(newpage, upage, init, type, aux, page_initializer);
+		newpage->writable = writable;
 		if (aux != NULL)
 		{
 			memcpy(&(newpage->running_file), aux, sizeof(struct file *));
@@ -88,8 +88,8 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 	{
 		vm_dealloc_page(exist_page);
 		struct page *newpage = calloc(1, sizeof(struct page));
-		newpage->writable = writable;
 		uninit_new(newpage, upage, init, type, aux, page_initializer);
+		newpage->writable = writable;
 		spt_insert_page(spt, newpage);
 		return true;
 	}
@@ -256,11 +256,11 @@ vm_do_claim_page(struct page *page)
 	switch (page->operations->type)
 	{
 	case VM_UNINIT:
-		if (!install_page(page->va, frame->kva, 1))
+		if (!install_page(page->va, frame->kva, page->writable))
 			PANIC("FAIL");
 		break;
 	case VM_ANON:
-		if (!install_page(page->va, frame->kva, 1))
+		if (!install_page(page->va, frame->kva, page->writable))
 			PANIC("FAIL");
 		break;
 	case VM_FILE:
