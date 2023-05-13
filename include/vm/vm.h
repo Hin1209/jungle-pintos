@@ -54,9 +54,6 @@ struct page
 	bool writable;
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */
-	struct file *running_file;
-	int ofs;
-	int read_bytes;
 	union
 	{
 		struct uninit_page uninit;
@@ -74,6 +71,14 @@ struct frame
 	void *kva;
 	struct page *page;
 	struct list_elem frame_elem;
+};
+
+struct load
+{
+	struct file *file;
+	int ofs;
+	uint32_t read_bytes;
+	uint32_t zero_bytes;
 };
 
 /* The function table for page operations.

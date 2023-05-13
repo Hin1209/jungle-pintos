@@ -73,23 +73,8 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 		struct page *newpage = calloc(1, sizeof(struct page));
 		uninit_new(newpage, upage, init, type, aux, page_initializer);
 		newpage->writable = writable;
-		if (aux != NULL)
-		{
-			memcpy(&(newpage->running_file), aux, sizeof(struct file *));
-			memcpy(&(newpage->ofs), (aux + 8), sizeof(int));
-			memcpy(&(newpage->read_bytes), (aux + 12), sizeof(int));
-		}
 
 		/* TODO: Insert the page into the spt. */
-		spt_insert_page(spt, newpage);
-		return true;
-	}
-	else
-	{
-		vm_dealloc_page(exist_page);
-		struct page *newpage = calloc(1, sizeof(struct page));
-		uninit_new(newpage, upage, init, type, aux, page_initializer);
-		newpage->writable = writable;
 		spt_insert_page(spt, newpage);
 		return true;
 	}
@@ -305,6 +290,12 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 		{
 			vm_do_claim_page(newpage);
 			memcpy(newpage->va, page->frame->kva, PGSIZE);
+		}
+		else
+		{
+			void *aux = malloc(sizeof(struct load));
+			memcpy(aux, newpage->uninit.aux, sizeof(struct load));
+			newpage->uninit.aux = aux;
 		}
 		spt_insert_page(dst, newpage);
 	}

@@ -21,6 +21,7 @@
 #ifdef VM
 #include "vm/vm.h"
 #endif
+#define VM
 
 static void process_cleanup(void);
 static bool load(const char *file_name, struct intr_frame *if_);
@@ -798,24 +799,18 @@ install_page(void *upage, void *kpage, bool writable)
  * If you want to implement the function for only project 2, implement it on the
  * upper block. */
 
-struct load
-{
-	struct file *file;
-	int ofs;
-	uint32_t read_bytes;
-	uint32_t zero_bytes;
-};
-
 static bool
-lazy_load_segment(struct page *page, void *aux)
+lazy_load_segment(struct page *page, void *aux_)
 {
 	/* TODO: Load the segment from the file */
 	/* TODO: This called when the first page fault occurs on address VA. */
 	/* TODO: VA is available when calling this function. */
-	struct file *file = page->running_file;
-	off_t ofs = page->ofs;
-	uint32_t read_bytes = page->read_bytes;
-	uint32_t zero_bytes = read_bytes < PGSIZE ? PGSIZE - read_bytes : 0;
+	struct load *aux = (struct load *)aux_;
+	struct file *file = aux->file;
+	off_t ofs = aux->ofs;
+	uint32_t read_bytes = aux->read_bytes;
+	uint32_t zero_bytes = aux->zero_bytes;
+	free(aux);
 
 	file_seek(file, ofs);
 	if (file_read(file, page->va, read_bytes) != (int)read_bytes)
@@ -859,14 +854,14 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
 		/* TODO: Set up aux to pass information to the lazy_load_segment. */
-		struct load aux;
-		aux.file = file;
-		aux.ofs = ofs;
-		aux.read_bytes = page_read_bytes;
-		aux.zero_bytes = page_zero_bytes;
+		struct load *aux = malloc(sizeof(struct load));
+		aux->file = file;
+		aux->ofs = ofs;
+		aux->read_bytes = page_read_bytes;
+		aux->zero_bytes = page_zero_bytes;
 
 		if (!vm_alloc_page_with_initializer(VM_ANON, upage,
-											writable, lazy_load_segment, &aux))
+											writable, lazy_load_segment, aux))
 			return false;
 
 		/* Advance. */
