@@ -182,6 +182,7 @@ vm_stack_growth(void *addr UNUSED)
 {
 	struct page *newpage = calloc(1, sizeof(struct page));
 	uninit_new(newpage, pg_round_down(addr), NULL, VM_ANON, NULL, anon_initializer);
+	newpage->writable = 1;
 	spt_insert_page(&thread_current()->spt, newpage);
 	vm_do_claim_page(newpage);
 }
