@@ -66,7 +66,7 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 	upage = pg_round_down(upage);
 	/* Check wheter the upage is already occupied or not. */
 	bool (*page_initializer)(struct page *, enum vm_type, void *kva);
-	switch (type)
+	switch (VM_TYPE(type))
 	{
 		case VM_ANON:
 			page_initializer = anon_initializer;
@@ -81,22 +81,10 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 		 * TODO: and then create "uninit" page struct by calling uninit_new. You
 		 * TODO: should modify the field after calling the uninit_new. */
 		struct page *newpage = calloc(1, sizeof(struct page));
-		newpage->writable = writable;
 		uninit_new(newpage, upage, init, type, aux, page_initializer);
-		if (aux !=NULL) {
-			memcpy(&(newpage->running_file), aux, sizeof(struct file *));
-			memcpy(&(newpage->ofs), (aux + 8), sizeof(int));
-			memcpy(&(newpage->read_bytes), (aux + 12), sizeof(int));
-		}
+		newpage->writable = writable;
 
 		/* TODO: Insert the page into the spt. */
-		spt_insert_page(spt, newpage);
-		return true;
-	} else {
-		vm_dealloc_page(exist_page);
-		struct page *newpage = calloc(1, sizeof(struct page));
-		newpage->writable = writable;
-		uninit_new(newpage, upage, init, type, aux, page_initializer);
 		spt_insert_page(spt, newpage);
 		return true;
 	}
@@ -186,10 +174,8 @@ vm_get_frame(void)
 static void
 vm_stack_growth(void *addr UNUSED)
 {
-	struct page* newpage = calloc(1, sizeof(struct page));
-	uninit_new(newpage,pg_round_down(addr), NULL, VM_ANON, NULL, anon_initializer);
-	spt_insert_page(&thread_current()->spt,newpage);
-	return vm_do_claim_page(newpage);
+	vm_alloc_page_with_initializer(VM_ANON, pg_round_down(addr), 1, NULL, NULL);
+	vm_claim_page(pg_round_down(addr));
 }
 
 /* Handle the fault on write_protected page */
@@ -249,14 +235,14 @@ vm_do_claim_page(struct page *page)
 	frame->page = page;
 	page->frame = frame;
 
-	switch (page->operations->type)
+	switch (VM_TYPE(page->operations->type))
 	{
 	case VM_UNINIT:
-		if (!install_page(page->va, frame->kva, 1))
+		if (!install_page(page->va, frame->kva, page->writable))
 			PANIC("FAIL");
 		break;
 	case VM_ANON:
-		if (!install_page(page->va, frame->kva, 1))
+		if (!install_page(page->va, frame->kva, page->writable))
 			PANIC("FAIL");
 		break;
 	case VM_FILE:
@@ -290,32 +276,53 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 								  struct supplemental_page_table *src UNUSED)
 {
 	struct hash_iterator i;
+	struct page *newpage;
+	void *aux;
 	hash_first(&i, &src->spt_hash);
 	while (hash_next(&i))
 	{
 		struct page *page = hash_entry(hash_cur(&i), struct page, page_elem);
-		struct page *newpage = malloc(sizeof(struct page));
-		memcpy(newpage, page, sizeof(struct page));
-		vm_do_claim_page(newpage);
-		if (page->operations->type != VM_UNINIT)
-			memcpy(newpage->va, page->frame->kva, PGSIZE);
-		spt_insert_page(dst, newpage);
+		switch (VM_TYPE(page->operations->type)){
+			case VM_UNINIT:
+				aux = malloc(sizeof(struct load));
+				memcpy(aux, page->uninit.aux, sizeof(struct load));
+				vm_alloc_page_with_initializer(page->uninit.type, page->va, page->writable, page->uninit.init, aux);
+				break;
+			case VM_ANON:
+				vm_alloc_page_with_initializer(page->operations->type, page->va, page->writable, NULL, NULL);
+				vm_claim_page(page->va);
+				newpage = spt_find_page(dst, page->va);
+				memcpy(newpage->va, page->frame->kva, PGSIZE);
+				break;
+			case VM_FILE:
+				newpage = malloc(sizeof(struct page));
+				struct file_page *file = &newpage->file;
+				newpage-> va = page->va;
+				newpage-> writable = page->writable;
+				newpage-> operations = page->operations;
+				spt_insert_page(&thread_current()->spt,newpage);
+				newpage->frame = page->frame;
+				newpage->file.file = page->file.file;
+				newpage->file.file_length = page->file.file_length;
+				newpage->file.ofs = page->file.ofs;
+				newpage->file.read_bytes = page->file.read_bytes;
+				newpage->file.zero_bytes = page->file.zero_bytes;
+				pml4_set_page(thread_current()->pml4, newpage->va, page->frame->kva, page->writable);
+				break;
+		}
 	}
 	return true;  
+}
+
+void clear_page_hash(struct hash_elem *h, void *aux)
+{
+	struct page *page = hash_entry(h, struct page, page_elem);
+	vm_dealloc_page(page);
 }
 
 /* Free the resource hold by the supplemental page table */
 // supplemental page table에 의해 유지되던 모든 자원들을 free합니다. 
 void supplemental_page_table_kill(struct supplemental_page_table *spt UNUSED)
 {
-	struct hash_iterator i;
-	struct page *de_page = NULL;
-	hash_first(&i, &spt->spt_hash);
-	while (hash_next(&i))
-	{
-		if (de_page != NULL)
-			vm_dealloc_page(de_page);
-		de_page = hash_entry(hash_cur(&i), struct page, page_elem);
-	}
-	return true;   
+	hash_clear(&spt->spt_hash, clear_page_hash);
 }

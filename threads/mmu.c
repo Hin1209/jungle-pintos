@@ -274,6 +274,7 @@ pml4_is_dirty (uint64_t *pml4, const void *vpage) {
 
 /* Set the dirty bit to DIRTY in the PTE for virtual page VPAGE
  * in PML4. */
+///* PML4의 가상 페이지 VPAGE에 대한 PTE의 dirty 비트를 DIRTY로 설정합니다. */
 void
 pml4_set_dirty (uint64_t *pml4, const void *vpage, bool dirty) {
 	uint64_t *pte = pml4e_walk (pml4, (uint64_t) vpage, false);

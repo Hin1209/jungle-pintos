@@ -21,6 +21,7 @@
 #ifdef VM
 #include "vm/vm.h"
 #endif
+#define VM
 
 static void process_cleanup(void);
 static bool load(const char *file_name, struct intr_frame *if_);
@@ -29,7 +30,7 @@ static void __do_fork(void *);
 
 struct file *process_get_file(int fd)
 {
-	if (fd < 0 || fd >= 128)
+	if (fd < 0 || fd >= FDT_COUNT)
 	{
 		return NULL;
 	}
@@ -43,12 +44,12 @@ int process_add_file(struct file *f)
 	struct thread *curr = thread_current();
 	struct file **fdt = curr->fdt;
 	// 파일 테이블에 없는 파일 디스크립터 찾기
-	while ((curr->next_fd < 128) && fdt[curr->next_fd])
+	while ((curr->next_fd < FDT_COUNT) && fdt[curr->next_fd])
 	{
 		curr->next_fd++;
 	}
-	// 찾은 파일 디스크립터가 128보다 크거나 같으면 return -1
-	if (curr->next_fd >= 128)
+	// 찾은 파일 디스크립터가 128(FDT_COUNT)보다 크거나 같으면 return -1
+	if (curr->next_fd >= FDT_COUNT)
 	{
 		return -1;
 	}
@@ -61,7 +62,7 @@ void process_close_file(int fd)
 {
 	/* 파일 디스크립터에 해당하는 파일을 닫고 해당 엔트리 초기화 */
 	struct thread *curr = thread_current();
-	if (fd < 0 || fd >= 128)
+	if (fd < 0 || fd >= FDT_COUNT)
 	{
 		return NULL;
 	}
@@ -420,7 +421,7 @@ void process_exit(void)
 {
 	struct thread *curr = thread_current(); // 자식
 
-	for (int i = 2; i < 128; i++)
+	for (int i = 2; i < FDT_COUNT; i++)
 	{
 		/* 현재 파일 디스크립터가 열린 상태인 경우 */
 		if (curr->fdt[i] != NULL)
@@ -433,6 +434,7 @@ void process_exit(void)
 	palloc_free_multiple(curr->fdt, 3);
 	file_close(curr->running);
 	process_cleanup();
+	hash_destroy(&curr->spt.spt_hash, NULL);
 	sema_up(&curr->wait_sema);
 	sema_down(&curr->exit_sema);
 }
@@ -807,28 +809,22 @@ install_page(void *upage, void *kpage, bool writable)
  * If you want to implement the function for only project 2, implement it on the
  * upper block. */
 
-struct load
-{
-	struct file *file;
-	off_t ofs;
-	uint32_t read_bytes;
-	uint32_t zero_bytes;
-};
-
 static bool
-lazy_load_segment(struct page *page, void *aux)
+lazy_load_segment(struct page *page, void *aux_)
 {
 	/* TODO: Load the segment from the file */
 	/* TODO: This called when the first page fault occurs on address VA. */
 	/* TODO: VA is available when calling this function. */
-	struct file *file = page->running_file;
-	off_t ofs = page->ofs;
-	uint32_t read_bytes = page->read_bytes;
-	uint32_t zero_bytes = read_bytes < PGSIZE ? PGSIZE - read_bytes : 0;
-	//free(aux);
+	struct load *aux = (struct load *)aux_;
+	struct file *file = aux->file;
+	off_t ofs = aux->ofs;
+	uint32_t read_bytes = aux->read_bytes;
+	uint32_t zero_bytes = aux->zero_bytes;
+	free(aux);
+
 	file_seek(file, ofs);
 
-	if (read_bytes > 0 && file_read(file, page->va, read_bytes) != (int)read_bytes)
+	if (file_read(file, page->va, read_bytes) != (int)read_bytes)
 	{
 		// error handle
 		return false;
@@ -869,14 +865,14 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
 		/* TODO: Set up aux to pass information to the lazy_load_segment. */
-		struct load aux;
-		aux.file = file;
-		aux.ofs = ofs;
-		aux.read_bytes = page_read_bytes;
-		aux.zero_bytes = page_zero_bytes;
+		struct load *aux = malloc(sizeof(struct load));
+		aux->file = file;
+		aux->ofs = ofs;
+		aux->read_bytes = page_read_bytes;
+		aux->zero_bytes = page_zero_bytes;
 
 		if (!vm_alloc_page_with_initializer(VM_ANON, upage,
-											writable, lazy_load_segment, &aux))
+											writable, lazy_load_segment, aux))
 			return false;
 
 		/* Advance. */
@@ -901,10 +897,8 @@ setup_stack(struct intr_frame *if_)
 	/* TODO: Your code goes here */
 	// if (!vm_alloc_page_with_initializer(VM_ANON, stack_bottom, 1, NULL, NULL))
 	// 	return false;
-	struct page* newpage = calloc(1, sizeof(struct page));
-	uninit_new(newpage,stack_bottom, NULL, VM_ANON, NULL, anon_initializer);
-	newpage->writable = 1;
-	spt_insert_page(&thread_current()->spt,newpage);
+	if (!vm_alloc_page_with_initializer(VM_ANON, stack_bottom, 1, NULL, NULL))
+		return false;
 	vm_claim_page(stack_bottom);
 	
 	if_->rsp = USER_STACK;

@@ -43,6 +43,14 @@ struct list frame_table;
  * This is kind of "parent class", which has four "child class"es, which are
  * uninit_page, file_page, anon_page, and page cache (project4).
  * DO NOT REMOVE/MODIFY PREDEFINED MEMBER OF THIS STRUCTURE. */
+struct load
+{
+	struct file *file;
+	off_t ofs;
+	uint32_t read_bytes;
+	uint32_t zero_bytes;
+};
+
 struct page
 {
 	const struct page_operations *operations;
@@ -54,9 +62,6 @@ struct page
 	bool writable;
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */
-	struct file *running_file;
-	int ofs;
-	int read_bytes;
 	union
 	{
 		struct uninit_page uninit;

@@ -12,7 +12,7 @@
 #include "threads/synch.h"
 #include "userprog/process.h"
 #include "threads/palloc.h"
-
+#include "vm/file.h"
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
@@ -31,6 +31,8 @@ int write(int fd, const void *buffer, unsigned size);
 void seek(int fd, unsigned position);
 unsigned tell(int fd);
 void close (int fd);
+void *mmap(void *addr, size_t length, int writable, int fd, off_t offset);
+void munmap(void *addr);
 
 /* System call.
  *
@@ -133,6 +135,12 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	// 	printf("dup2!\n");
 	// 	// f->R.rax = dup2(f->R.rdi, f->R.rsi);
 	// 	break;
+	case SYS_MMAP:
+		f->R.rax = mmap(f->R.rdi, f->R.rsi, f->R.rdx, f->R.r10, f->R.r8);
+		break;
+	case SYS_MUNMAP:
+		munmap(f->R.rdi);
+		break;
 	default:
 		// printf("default exit!\n");
 		exit(-1);
@@ -320,6 +328,10 @@ int write(int fd, const void *buffer, unsigned size)
 	}
 	else
 	{
+		if (write_file == NULL){
+			lock_release(&filesys_lock);
+			return -1;
+		}
 		bytes_write = file_write(write_file, buffer, size);
 	}
 	lock_release(&filesys_lock);
@@ -376,4 +388,25 @@ void close (int fd)
 	}
 	file_close(close_file);
 	process_close_file(fd);
+}
+
+void *mmap(void *addr, size_t length, int writable, int fd, off_t offset)
+{
+	if (pg_ofs(addr) != 0 || addr == NULL|| !(is_user_vaddr(addr))){
+		return NULL;
+	} 
+	struct file *file = process_get_file(fd);
+	if (file == NULL || length == 0)
+		return NULL;
+	return do_mmap(addr, length, writable, file, offset);
+	//fd로 열린 파일의 오프셋(offset) 바이트부터 length 바이트 만큼을 프로세스의 가상주소공간의 주소 addr 에 매핑 합니다.
+    //전체 파일은 addr에서 시작하는 연속 가상 페이지에 매핑됩니다. 파일 길이(length)가 PGSIZE의 배수가 아닌 경우 최종 매핑된 페이지의 일부 바이트가 파일 끝을 넘어 "stick out"됩니다. page_fault가 발생하면 이 바이트를 0으로 설정하고 페이지를 디스크에 다시 쓸 때 버립니다. 
+    //성공하면 이 함수는 파일이 매핑된 가상 주소를 반환합니다. 실패하면 파일을 매핑하는 데 유효한 주소가 아닌 NULL을 반환해야 합니다.
+	
+}
+
+void munmap(void *addr)
+{
+	check_address(addr);
+	do_munmap(addr);
 }
