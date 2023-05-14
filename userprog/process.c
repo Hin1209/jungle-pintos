@@ -847,6 +847,15 @@ lazy_load_segment(struct page *page, void *aux_)
  *
  * Return true if successful, false if a memory allocation error
  * or disk read error occurs. */
+/* UPAGE 주소에서 시작하는 가상 메모리에 대해 OFS 오프셋의 FILE로부터 로드합니다.
+
+총 READ_BYTES + ZERO_BYTES 바이트의 가상 메모리가 다음과 같이 초기화됩니다:
+UPAGE에서 시작하는 READ_BYTES 바이트는 OFS 오프셋에서 FILE로부터 읽혀야 합니다.
+UPAGE + READ_BYTES에서 시작하는 ZERO_BYTES 바이트는 0으로 초기화되어야 합니다.
+이 함수에 의해 초기화된 페이지는 WRITABLE이 true인 경우 사용자 프로세스에 의해 쓰기 가능해야 하며,
+그렇지 않은 경우 읽기 전용이어야 합니다.
+메모리 할당 오류 또는 디스크 읽기 오류가 발생할 경우 false를 반환하고,
+성공한 경우 true를 반환합니다. */
 static bool
 load_segment(struct file *file, off_t ofs, uint8_t *upage,
 			 uint32_t read_bytes, uint32_t zero_bytes, bool writable)

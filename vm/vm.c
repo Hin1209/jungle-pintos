@@ -239,6 +239,7 @@ vm_do_claim_page(struct page *page)
 	/* Set links */
 	frame->page = page;
 	page->frame = frame;
+	frame->cnt_page = 1;
 
 	switch (VM_TYPE(page->operations->type))
 	{
@@ -307,7 +308,8 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 				newpage-> operations = page->operations;
 				spt_insert_page(&thread_current()->spt,newpage);
 				newpage->frame = page->frame;
-				newpage->file.file = page->file.file;
+				newpage->frame->cnt_page += 1;
+				newpage->file.file = file_reopen(page->file.file);
 				newpage->file.file_length = page->file.file_length;
 				newpage->file.ofs = page->file.ofs;
 				newpage->file.read_bytes = page->file.read_bytes;

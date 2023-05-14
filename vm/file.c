@@ -2,6 +2,7 @@
 
 #include "vm/vm.h"
 #include "threads/vaddr.h"
+#include "threads/mmu.h"
 #include "userprog/process.h"
 
 static bool file_backed_swap_in(struct page *page, void *kva);
@@ -61,6 +62,10 @@ file_backed_destroy(struct page *page)
 	// 내용이 dirty인 경우 변경 사항을 파일에 다시 기록해야 합니다.
 	// 이 함수에서 페이지 구조를 free할 필요는 없습니다. file_backed_destroy의 호출자는 이를 처리해야 합니다.
 	struct file_page *file_page UNUSED = &page->file;
+	//화살표만 지움(엔트리 연결 해제)
+	page->frame->cnt_page -= 1;
+	if (page->frame->cnt_page > 0)
+		pml4_clear_page(thread_current()->pml4, page->va);
 }
 
 static bool lazy_load(struct page *page, void *aux_)
@@ -117,6 +122,4 @@ do_mmap(void *addr, size_t length, int writable,
 /* Do the munmap */
 void do_munmap(void *addr)
 {
-	//지정된 주소 범위 addr에 대한 매핑을 해제합니다.
-    //지정된 주소는 아직 매핑 해제되지 않은 동일한 프로세서의 mmap에 대한 이전 호출에서 반환된 가상 주소여야 합니다.
 }
