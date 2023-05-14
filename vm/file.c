@@ -2,6 +2,7 @@
 
 #include "vm/vm.h"
 #include "threads/vaddr.h"
+#include "threads/mmu.h"
 #include "userprog/process.h"
 
 static bool file_backed_swap_in(struct page *page, void *kva);
@@ -56,6 +57,9 @@ static void
 file_backed_destroy(struct page *page)
 {
 	struct file_page *file_page UNUSED = &page->file;
+	page->frame->cnt_page -= 1;
+	if (page->frame->cnt_page > 0)
+		pml4_clear_page(thread_current()->pml4, page->va);
 }
 
 static bool lazy_load(struct page *page, void *aux_)
