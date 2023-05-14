@@ -12,6 +12,7 @@
 #include "threads/synch.h"
 #include "userprog/process.h"
 #include "threads/palloc.h"
+#include "vm/file.h"
 
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
@@ -30,6 +31,8 @@ int write(int fd, const void *buffer, unsigned size);
 void seek(int fd, unsigned position);
 unsigned tell(int fd);
 void close(int fd);
+void *mmap(void *addr, size_t length, int writable, int fd, off_t offset);
+void munmap(void *addr);
 
 /* System call.
  *
@@ -282,8 +285,6 @@ int write(int fd, const void *buffer, unsigned size)
 {
 	check_address(buffer);
 	struct file *write_file = process_get_file(fd);
-	if (write_file == NULL)
-		return -1;
 	int bytes_write;
 	lock_acquire(&filesys_lock);
 	if (fd < 2)
@@ -300,6 +301,11 @@ int write(int fd, const void *buffer, unsigned size)
 	}
 	else
 	{
+		if (write_file == NULL)
+		{
+			lock_release(&filesys_lock);
+			return -1;
+		}
 		bytes_write = file_write(write_file, buffer, size);
 	}
 	lock_release(&filesys_lock);
@@ -360,13 +366,16 @@ void close(int fd)
 
 void *mmap(void *addr, size_t length, int writable, int fd, off_t offset)
 {
-	check_address(addr);
-	struct file *file = process_get_file(fd);
-	if (file == NULL)
+	if (pg_ofs(addr) != 0 || addr == NULL || !is_user_vaddr(addr))
 		return NULL;
+	struct file *file = process_get_file(fd);
+	if (file == NULL || length == 0)
+		return NULL;
+	return do_mmap(addr, length, writable, file, offset);
 }
 
 void munmap(void *addr)
 {
 	check_address(addr);
+	do_munmap(addr);
 }

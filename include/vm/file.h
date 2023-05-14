@@ -10,7 +10,17 @@ struct file_page
 {
 	struct file *file;
 	off_t ofs;
-	int ready_bytes;
+	int file_length;
+	int read_bytes;
+	int zero_bytes;
+};
+
+struct file_load
+{
+	struct file *file;
+	off_t ofs;
+	int file_length;
+	int read_bytes;
 	int zero_bytes;
 };
 

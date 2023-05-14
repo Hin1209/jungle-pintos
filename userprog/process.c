@@ -44,12 +44,12 @@ int process_add_file(struct file *f)
 	struct thread *curr = thread_current();
 	struct file **fdt = curr->fdt;
 	// 파일 테이블에 없는 파일 디스크립터 찾기
-	while ((curr->next_fd < 128) && fdt[curr->next_fd])
+	while ((curr->next_fd < FDT_COUNT) && fdt[curr->next_fd])
 	{
 		curr->next_fd++;
 	}
 	// 찾은 파일 디스크립터가 128보다 크거나 같으면 return -1
-	if (curr->next_fd >= 128)
+	if (curr->next_fd >= FDT_COUNT)
 	{
 		return -1;
 	}
@@ -62,7 +62,7 @@ void process_close_file(int fd)
 {
 	/* 파일 디스크립터에 해당하는 파일을 닫고 해당 엔트리 초기화 */
 	struct thread *curr = thread_current();
-	if (fd < 0 || fd >= 128)
+	if (fd < 0 || fd >= FDT_COUNT)
 	{
 		return NULL;
 	}
@@ -301,7 +301,7 @@ __do_fork(void *aux)
 	 * TODO:       from the fork() until this function successfully duplicates
 	 * TODO:       the resources of parent.*/
 	// FDT복사
-	for (int i = 0; i < 128; i++)
+	for (int i = 0; i < FDT_COUNT; i++)
 	{
 		struct file *file = parent->fdt[i];
 		if (file == NULL)
@@ -411,7 +411,7 @@ void process_exit(void)
 {
 	struct thread *curr = thread_current(); // 자식
 
-	for (int i = 2; i < 128; i++)
+	for (int i = 2; i < FDT_COUNT; i++)
 	{
 		/* 현재 파일 디스크립터가 열린 상태인 경우 */
 		if (curr->fdt[i] != NULL)

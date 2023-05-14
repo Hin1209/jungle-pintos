@@ -5,6 +5,7 @@
 #include "threads/mmu.h"
 #include "vm/vm.h"
 #include "vm/inspect.h"
+#include "vm/file.h"
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
@@ -277,22 +278,40 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 								  struct supplemental_page_table *src UNUSED)
 {
 	struct hash_iterator i;
+	struct page *newpage;
+	void *aux;
 	hash_first(&i, &src->spt_hash);
 	while (hash_next(&i))
 	{
 		struct page *page = hash_entry(hash_cur(&i), struct page, page_elem);
-		if (VM_TYPE(page->operations->type) != VM_UNINIT)
+		switch (VM_TYPE(page->operations->type))
 		{
-			vm_alloc_page_with_initializer(page->operations->type, page->va, page->writable, NULL, NULL);
-			vm_claim_page(page->va);
-			struct page *newpage = spt_find_page(dst, page->va);
-			memcpy(newpage->va, page->frame->kva, PGSIZE);
-		}
-		else
-		{
-			void *aux = malloc(sizeof(struct load));
+		case VM_UNINIT:
+			aux = malloc(sizeof(struct load));
 			memcpy(aux, page->uninit.aux, sizeof(struct load));
 			vm_alloc_page_with_initializer(page->uninit.type, page->va, page->writable, page->uninit.init, aux);
+			break;
+		case VM_ANON:
+			vm_alloc_page_with_initializer(page->operations->type, page->va, page->writable, NULL, NULL);
+			vm_claim_page(page->va);
+			newpage = spt_find_page(dst, page->va);
+			memcpy(newpage->va, page->frame->kva, PGSIZE);
+			break;
+		case VM_FILE:
+			newpage = malloc(sizeof(struct page));
+			struct file_page *file = &newpage->file;
+			newpage->va = page->va;
+			newpage->writable = page->writable;
+			newpage->operations = page->operations;
+			spt_insert_page(&thread_current()->spt, newpage);
+			newpage->frame = page->frame;
+			newpage->file.file = page->file.file;
+			newpage->file.file_length = page->file.file_length;
+			newpage->file.ofs = page->file.ofs;
+			newpage->file.read_bytes = page->file.read_bytes;
+			newpage->file.zero_bytes = page->file.zero_bytes;
+			pml4_set_page(thread_current()->pml4, newpage->va, page->frame->kva, page->writable);
+			break;
 		}
 	}
 	return true;
