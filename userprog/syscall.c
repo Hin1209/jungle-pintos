@@ -113,6 +113,12 @@ void syscall_handler(struct intr_frame *f UNUSED)
 	case SYS_CLOSE:
 		close(f->R.rdi);
 		break;
+	case SYS_MMAP:
+		f->R.rax = mmap(f->R.rdi, f->R.rsi, f->R.rdx, f->R.r10, f->R.r8);
+		break;
+	case SYS_MUNMAP:
+		munmap(f->R.rdi);
+		break;
 	default:
 		exit(-1);
 		break;
@@ -124,24 +130,19 @@ void check_address(void *addr)
 	struct thread *curr = thread_current();
 	if (addr == NULL || !(is_user_vaddr(addr)))
 	{
-		// 주소가 null이 아니고, 커널 스택의 주소 아니고, 해당 가상 주소에 대한 PTE가 존재할 때만 시스템 콜을 호출할 자격이 있는 포인터다.
 		exit(-1);
 	}
-	/* 포인터가 가리키는 주소가 유저영역의 주소인지 확인 */
-	/* 잘못된 접근(유저 영역을 벗어난 영역)일 경우 프로세스 종료(exit(-1)) */
 }
 
 void halt(void)
 {
 	power_off();
-	// pintos 종료시키는 시스템 콜
 	/* power_off()를 사용하여 pintos 종료 */
 }
 
 void exit(int status)
 {
 	struct thread *cur = thread_current();
-	/* 프로세스 디스크립터에 exit status 저장 */
 	cur->exit_status = status;
 	printf("%s: exit(%d)\n", cur->name, status);
 	thread_exit();
@@ -170,7 +171,6 @@ tid_t fork(const char *thread_name, struct intr_frame *f)
 
 int wait(tid_t pid)
 {
-	/* 자식 프로세스가 종료 될 때까지 대기 */
 	return process_wait(pid);
 }
 
@@ -189,7 +189,7 @@ bool create(const char *file, unsigned initial_size)
 bool remove(const char *file)
 {
 	/*
-  - 파일을 삭제하는 시스템 콜
+	- 파일을 삭제하는 시스템 콜
 	- file : 제거할 파일의 이름 및 경로 정보
 	- 성공 일 경우 true, 실패 일 경우 false 리턴
 	*/
@@ -282,6 +282,8 @@ int write(int fd, const void *buffer, unsigned size)
 {
 	check_address(buffer);
 	struct file *write_file = process_get_file(fd);
+	if (write_file == NULL)
+		return -1;
 	int bytes_write;
 	lock_acquire(&filesys_lock);
 	if (fd < 2)
@@ -354,4 +356,17 @@ void close(int fd)
 	}
 	file_close(close_file);
 	process_close_file(fd);
+}
+
+void *mmap(void *addr, size_t length, int writable, int fd, off_t offset)
+{
+	check_address(addr);
+	struct file *file = process_get_file(fd);
+	if (file == NULL)
+		return NULL;
+}
+
+void munmap(void *addr)
+{
+	check_address(addr);
 }
