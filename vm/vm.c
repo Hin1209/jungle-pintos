@@ -182,7 +182,9 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 {
 	struct supplemental_page_table *spt UNUSED = &thread_current()->spt;
 	struct page *page = NULL;
-	uint64_t user_rsp = thread_current()->user_rsp;
+	uint64_t user_rsp = f->rsp;
+	if (!user)
+		user_rsp = thread_current()->user_rsp;
 	if (not_present)
 	{
 		if (user_rsp - 8 == addr || pg_round_down(user_rsp) == pg_round_down(addr) || (user_rsp < addr && addr < USER_STACK))
@@ -190,9 +192,10 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 			vm_stack_growth(addr);
 			return true;
 		}
-
 		page = spt_find_page(spt, pg_round_down(addr));
 		if (page == NULL)
+			exit(-1);
+		if (write == 1 && page->writable == 0)
 			exit(-1);
 	}
 	else if (write)
