@@ -83,6 +83,11 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 		struct page *newpage = calloc(1, sizeof(struct page));
 		newpage->writable = writable;
 		uninit_new(newpage, upage, init, type, aux, page_initializer);
+		if (aux !=NULL) {
+			memcpy(&(newpage->running_file), aux, sizeof(struct file *));
+			memcpy(&(newpage->ofs), (aux + 8), sizeof(int));
+			memcpy(&(newpage->read_bytes), (aux + 12), sizeof(int));
+		}
 
 		/* TODO: Insert the page into the spt. */
 		spt_insert_page(spt, newpage);
@@ -93,11 +98,6 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 		newpage->writable = writable;
 		uninit_new(newpage, upage, init, type, aux, page_initializer);
 		spt_insert_page(spt, newpage);
-		// if (exist_page->operations->type == VM_ANON) {
-		// 	pml4_clear_page(thread_current()->pml4, exist_page->va);
-
-		// }
-		// uninit_new(exist_page, upage, init, type, aux, page_initializer);
 		return true;
 	}
 err:
@@ -109,10 +109,9 @@ struct page *
 spt_find_page(struct supplemental_page_table *spt UNUSED, void *va UNUSED)
 {
 	struct page *page = NULL;
-	/* TODO: Fill this function. */
 	struct page tmp;
 	tmp.va = va;
-	struct hash_elem *h = hash_find(&spt->spt_hash, &(tmp.page_elem));
+	struct hash_elem *h = hash_find(&spt->spt_hash, &(tmp));
 	if (h == NULL)
 	{
 		return NULL;
@@ -187,6 +186,10 @@ vm_get_frame(void)
 static void
 vm_stack_growth(void *addr UNUSED)
 {
+	struct page* newpage = calloc(1, sizeof(struct page));
+	uninit_new(newpage,pg_round_down(addr), NULL, VM_ANON, NULL, anon_initializer);
+	spt_insert_page(&thread_current()->spt,newpage);
+	return vm_do_claim_page(newpage);
 }
 
 /* Handle the fault on write_protected page */
@@ -201,9 +204,14 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 {
 	struct supplemental_page_table *spt UNUSED = &thread_current()->spt;
 	struct page *page = NULL;
+	uint64_t user_rsp = thread_current()->user_rsp;
 	/* TODO: Validate the fault */
 	/* TODO: Your code goes here */
-	page = spt_find_page(spt, addr);
+	if(user_rsp -8 == addr || pg_round_down(user_rsp)== pg_round_down(addr)||(user_rsp<addr && addr<USER_STACK)){
+		vm_stack_growth(addr);
+		return true;
+	}
+	page = spt_find_page(spt, pg_round_down(addr));
 	if (page == NULL)
 		exit(-1);
 
@@ -222,9 +230,7 @@ void vm_dealloc_page(struct page *page)
 bool vm_claim_page(void *va UNUSED)
 {
 	struct thread *curr = thread_current();
-	struct page *page = NULL;
-	struct hash_elem *h = spt_find_page(&curr->spt, va);
-	page = hash_entry(h, struct page, page_elem);
+	struct page *page = spt_find_page(&curr->spt, va);
 	if (page == NULL)
 	{
 	}
@@ -265,7 +271,7 @@ bool hash_page_less(const struct hash_elem *a, const struct hash_elem *b, void *
 {
 	struct page *page_a = hash_entry(a, struct page, page_elem);
 	struct page *page_b = hash_entry(b, struct page, page_elem);
-	return page_a->va < page_b->va;
+	return page_a->va < page_b->va; //두 페이지의 가상 주소(va)를 비교하여 작은 주소 순서로 정렬
 }
 
 unsigned int hash_va(const struct hash_elem *p, void *aux UNUSED)
@@ -297,10 +303,6 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 	}
 	return true;  
 }
-//	supplemental_page_table_init(&current->spt);
-//	if (!(&current->spt, &parent->spt))
-//		goto error;
-
 
 /* Free the resource hold by the supplemental page table */
 // supplemental page table에 의해 유지되던 모든 자원들을 free합니다. 

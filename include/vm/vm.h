@@ -54,6 +54,9 @@ struct page
 	bool writable;
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */
+	struct file *running_file;
+	int ofs;
+	int read_bytes;
 	union
 	{
 		struct uninit_page uninit;

@@ -821,10 +821,10 @@ lazy_load_segment(struct page *page, void *aux)
 	/* TODO: Load the segment from the file */
 	/* TODO: This called when the first page fault occurs on address VA. */
 	/* TODO: VA is available when calling this function. */
-	struct file *file = ((struct load *)aux)->file;
-	off_t ofs = ((struct load *)aux)->ofs;
-	uint32_t read_bytes = ((struct load *)aux)->read_bytes;
-	uint32_t zero_bytes = ((struct load *)aux)->zero_bytes;
+	struct file *file = page->running_file;
+	off_t ofs = page->ofs;
+	uint32_t read_bytes = page->read_bytes;
+	uint32_t zero_bytes = read_bytes < PGSIZE ? PGSIZE - read_bytes : 0;
 	//free(aux);
 	file_seek(file, ofs);
 
@@ -869,14 +869,14 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
 		/* TODO: Set up aux to pass information to the lazy_load_segment. */
-		struct load *aux = calloc(1,sizeof(struct load));
-		aux->file = file;
-		aux->ofs = ofs;
-		aux->read_bytes = page_read_bytes;
-		aux->zero_bytes = page_zero_bytes;
+		struct load aux;
+		aux.file = file;
+		aux.ofs = ofs;
+		aux.read_bytes = page_read_bytes;
+		aux.zero_bytes = page_zero_bytes;
 
 		if (!vm_alloc_page_with_initializer(VM_ANON, upage,
-											writable, lazy_load_segment, aux))
+											writable, lazy_load_segment, &aux))
 			return false;
 
 		/* Advance. */
@@ -899,9 +899,14 @@ setup_stack(struct intr_frame *if_)
 	 * TODO: If success, set the rsp accordingly.
 	 * TODO: You should mark the page is stack. */
 	/* TODO: Your code goes here */
-	if (!vm_alloc_page_with_initializer(VM_ANON, stack_bottom, 1, NULL, NULL))
-		return false;
-
+	// if (!vm_alloc_page_with_initializer(VM_ANON, stack_bottom, 1, NULL, NULL))
+	// 	return false;
+	struct page* newpage = calloc(1, sizeof(struct page));
+	uninit_new(newpage,stack_bottom, NULL, VM_ANON, NULL, anon_initializer);
+	newpage->writable = 1;
+	spt_insert_page(&thread_current()->spt,newpage);
+	vm_claim_page(stack_bottom);
+	
 	if_->rsp = USER_STACK;
 	success = true;
 

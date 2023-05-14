@@ -64,6 +64,7 @@ void
 syscall_handler (struct intr_frame *f UNUSED) {
 	// TODO: Your implementation goes here.
 	uint32_t *sp = f -> rsp; /* 유저 스택 포인터 */
+	thread_current()->user_rsp = f->rsp;
 	check_address((void *)sp);
 
 	char *fn_copy;
