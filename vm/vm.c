@@ -182,16 +182,26 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 {
 	struct supplemental_page_table *spt UNUSED = &thread_current()->spt;
 	struct page *page = NULL;
-	uint64_t user_rsp = thread_current()->user_rsp;
-	if (user_rsp - 8 == addr || pg_round_down(user_rsp) == pg_round_down(addr) || (user_rsp < addr && addr < USER_STACK))
+	uint64_t user_rsp = f->rsp;
+	if (!user)
+		user_rsp = thread_current()->user_rsp;
+	if (not_present)
 	{
-		vm_stack_growth(addr);
-		return true;
+		if (user_rsp - 8 == addr || pg_round_down(user_rsp) == pg_round_down(addr) || (user_rsp < addr && addr < USER_STACK))
+		{
+			vm_stack_growth(addr);
+			return true;
+		}
+		page = spt_find_page(spt, pg_round_down(addr));
+		if (page == NULL)
+			exit(-1);
+		if (write == 1 && page->writable == 0)
+			exit(-1);
 	}
-
-	page = spt_find_page(spt, pg_round_down(addr));
-	if (page == NULL)
+	else if (write)
+	{
 		exit(-1);
+	}
 
 	return vm_do_claim_page(page);
 }
@@ -236,6 +246,7 @@ vm_do_claim_page(struct page *page)
 	/* Set links */
 	frame->page = page;
 	page->frame = frame;
+	frame->cnt_page = 1;
 
 	switch (VM_TYPE(page->operations->type))
 	{
@@ -305,7 +316,8 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 			newpage->operations = page->operations;
 			spt_insert_page(&thread_current()->spt, newpage);
 			newpage->frame = page->frame;
-			newpage->file.file = page->file.file;
+			newpage->frame->cnt_page += 1;
+			newpage->file.file = file_reopen(page->file.file);
 			newpage->file.file_length = page->file.file_length;
 			newpage->file.ofs = page->file.ofs;
 			newpage->file.read_bytes = page->file.read_bytes;

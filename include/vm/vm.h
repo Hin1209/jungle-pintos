@@ -71,6 +71,7 @@ struct frame
 	void *kva;
 	struct page *page;
 	struct list_elem frame_elem;
+	int cnt_page;
 };
 
 struct load
