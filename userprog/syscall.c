@@ -243,6 +243,9 @@ int filesize(int fd)
 int read(int fd, void *buffer, unsigned size)
 {
 	check_address(buffer);
+	struct page *page = spt_find_page(&thread_current()->spt, pg_round_down(buffer));
+	if (page->writable == 0)
+		exit(-1);
 	off_t read_byte = 0;
 	uint8_t *read_buffer = (char *)buffer;
 	lock_acquire(&filesys_lock);
