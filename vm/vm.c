@@ -199,6 +199,8 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 		page = spt_find_page(spt, pg_round_down(addr));
 		if (page == NULL)
 			exit(-1);
+		if (write == 1 && page->writable == 0)
+			exit(-1);
 
 	}
 	else if (write){ //쓸 수 없는데 쓰려고 했다
