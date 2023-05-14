@@ -30,6 +30,8 @@ int write(int fd, const void *buffer, unsigned size);
 void seek(int fd, unsigned position);
 unsigned tell(int fd);
 void close(int fd);
+void *mmap(void *addr, size_t length, int writable, int fd, off_t offset);
+void munmap(void *addr);
 
 /* System call.
  *
@@ -282,8 +284,6 @@ int write(int fd, const void *buffer, unsigned size)
 {
 	check_address(buffer);
 	struct file *write_file = process_get_file(fd);
-	if (write_file == NULL)
-		return -1;
 	int bytes_write;
 	lock_acquire(&filesys_lock);
 	if (fd < 2)
@@ -300,6 +300,8 @@ int write(int fd, const void *buffer, unsigned size)
 	}
 	else
 	{
+		if (write_file == NULL)
+			return -1;
 		bytes_write = file_write(write_file, buffer, size);
 	}
 	lock_release(&filesys_lock);
