@@ -30,7 +30,7 @@ static void __do_fork(void *);
 
 struct file *process_get_file(int fd)
 {
-	if (fd < 0 || fd >= 128)
+	if (fd < 0 || fd >= FDT_COUNT)
 	{
 		return NULL;
 	}
