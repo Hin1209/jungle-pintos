@@ -4,6 +4,7 @@
 #include "threads/vaddr.h"
 #include "threads/mmu.h"
 #include "userprog/process.h"
+#include "userprog/syscall.h"
 
 static bool file_backed_swap_in(struct page *page, void *kva);
 static bool file_backed_swap_out(struct page *page);
@@ -58,6 +59,13 @@ file_backed_destroy(struct page *page)
 {
 	struct file_page *file_page UNUSED = &page->file;
 	page->frame->cnt_page -= 1;
+	if (pml4_is_dirty(thread_current()->pml4, page->va))
+	{
+		lock_acquire(&filesys_lock);
+		file_write_at(page->file.file, page->va, page->file.ofs, page->file.read_bytes);
+		lock_release(&filesys_lock);
+	}
+	file_close(page->file.file);
 	if (page->frame->cnt_page > 0)
 		pml4_clear_page(thread_current()->pml4, page->va);
 }
@@ -113,4 +121,27 @@ do_mmap(void *addr, size_t length, int writable,
 /* Do the munmap */
 void do_munmap(void *addr)
 {
+	size_t length;
+	int cnt_page;
+	if (pg_ofs(addr) != 0)
+		return;
+	struct page *page = spt_find_page(&thread_current()->spt, addr);
+	if (page == NULL)
+		return;
+	length = page->file.file_length;
+	cnt_page = length % PGSIZE ? length / PGSIZE + 1 : length / PGSIZE;
+	for (int i = 0; i < cnt_page; i++)
+	{
+		page = spt_find_page(&thread_current()->spt, addr + i * PGSIZE);
+		if (pml4_is_dirty)
+		{
+			lock_acquire(&filesys_lock);
+			file_write_at(page->file.file, page->va, page->file.ofs, page->file.read_bytes);
+			lock_release(&filesys_lock);
+		}
+		page->frame->cnt_page -= 1;
+		file_close(page->file.file);
+		hash_delete(&thread_current()->spt.spt_hash, &page->page_elem);
+		pml4_clear_page(thread_current()->pml4, page->va);
+	}
 }
