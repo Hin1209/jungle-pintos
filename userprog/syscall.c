@@ -369,7 +369,9 @@ void close(int fd)
 
 void *mmap(void *addr, size_t length, int writable, int fd, off_t offset)
 {
-	if (pg_ofs(addr) != 0 || addr == NULL || !is_user_vaddr(addr))
+	if (pg_ofs(addr) != 0 || (uint64_t)addr <= 0 || is_kernel_vaddr(addr))
+		return NULL;
+	if (is_kernel_vaddr((uint64_t)addr + length) || (uint64_t)addr + length <= 0)
 		return NULL;
 	struct file *file = process_get_file(fd);
 	if (file == NULL || length == 0)

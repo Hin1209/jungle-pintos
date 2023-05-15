@@ -814,12 +814,12 @@ lazy_load_segment(struct page *page, void *aux_)
 	free(aux);
 
 	file_seek(file, ofs);
-	if (file_read(file, page->va, read_bytes) != (int)read_bytes)
+	if (file_read(file, page->frame->kva, read_bytes) != (int)read_bytes)
 	{
 		// error handle
 		return false;
 	}
-	memset(page->va + read_bytes, 0, zero_bytes);
+	memset(page->frame->kva + read_bytes, 0, zero_bytes);
 	return true;
 }
 

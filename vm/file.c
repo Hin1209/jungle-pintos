@@ -62,7 +62,7 @@ file_backed_destroy(struct page *page)
 	if (pml4_is_dirty(thread_current()->pml4, page->va))
 	{
 		lock_acquire(&filesys_lock);
-		file_write_at(page->file.file, page->va, page->file.ofs, page->file.read_bytes);
+		file_write_at(page->file.file, page->va, page->file.read_bytes, page->file.ofs);
 		lock_release(&filesys_lock);
 	}
 	file_close(page->file.file);
@@ -80,9 +80,11 @@ static bool lazy_load(struct page *page, void *aux_)
 	free(aux);
 
 	file_seek(file, ofs);
-	file_read(file, page->va, read_bytes);
+	read_bytes = file_read(file, page->frame->kva, read_bytes);
+	// page->file.read_bytes = read_bytes;
+	// page->file.zero_bytes = PGSIZE - read_bytes;
 
-	memset(page->va + read_bytes, 0, zero_bytes);
+	memset(page->frame->kva + read_bytes, 0, zero_bytes);
 	return true;
 }
 
@@ -93,6 +95,9 @@ do_mmap(void *addr, size_t length, int writable,
 {
 	int cnt_page = length % PGSIZE ? length / PGSIZE + 1 : length / PGSIZE;
 	size_t length_ = length;
+	off_t ofs = file_length(file);
+	if (ofs < offset)
+		return NULL;
 	for (int i = 0; i < cnt_page; i++)
 	{
 		if (spt_find_page(&thread_current()->spt, addr + i * PGSIZE) != NULL)
@@ -116,6 +121,8 @@ do_mmap(void *addr, size_t length, int writable,
 
 		vm_alloc_page_with_initializer(VM_FILE, addr + i * PGSIZE, writable, lazy_load, aux);
 	}
+
+	return addr;
 }
 
 /* Do the munmap */
@@ -133,10 +140,10 @@ void do_munmap(void *addr)
 	for (int i = 0; i < cnt_page; i++)
 	{
 		page = spt_find_page(&thread_current()->spt, addr + i * PGSIZE);
-		if (pml4_is_dirty)
+		if (pml4_is_dirty(thread_current()->pml4, page->va))
 		{
 			lock_acquire(&filesys_lock);
-			file_write_at(page->file.file, page->va, page->file.ofs, page->file.read_bytes);
+			file_write_at(page->file.file, page->va, page->file.read_bytes, page->file.ofs);
 			lock_release(&filesys_lock);
 		}
 		page->frame->cnt_page -= 1;
