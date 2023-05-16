@@ -430,15 +430,11 @@ void process_exit(void)
 			close(i);
 		}
 	}
+	sema_up(&curr->wait_sema);
 	palloc_free_multiple(curr->fdt, 3);
-	if (!lock_held_by_current_thread(&filesys_lock))
-		lock_acquire(&filesys_lock);
 	file_close(curr->running);
 	process_cleanup();
-	if (lock_held_by_current_thread(&filesys_lock))
-		lock_release(&filesys_lock);
 	hash_destroy(&curr->spt.spt_hash, NULL);
-	sema_up(&curr->wait_sema);
 	sema_down(&curr->exit_sema);
 }
 
@@ -449,11 +445,7 @@ process_cleanup(void)
 	struct thread *curr = thread_current();
 
 #ifdef VM
-	if (!lock_held_by_current_thread(&filesys_lock))
-		lock_acquire(&filesys_lock);
 	supplemental_page_table_kill(&curr->spt);
-	if (lock_held_by_current_thread(&filesys_lock))
-		lock_release(&filesys_lock);
 #endif
 
 	uint64_t *pml4;
@@ -829,16 +821,12 @@ lazy_load_segment(struct page *page, void *aux_)
 	uint32_t zero_bytes = aux->zero_bytes;
 	free(aux);
 
-	if (!lock_held_by_current_thread(&filesys_lock))
-		lock_acquire(&filesys_lock);
 	file_seek(file, ofs);
 	if (file_read(file, page->frame->kva, read_bytes) != (int)read_bytes)
 	{
 		// error handle
 		return false;
 	}
-	if (lock_held_by_current_thread(&filesys_lock))
-		lock_release(&filesys_lock);
 	memset(page->frame->kva + read_bytes, 0, zero_bytes);
 	return true;
 }
