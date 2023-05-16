@@ -180,27 +180,42 @@ int wait (tid_t pid)
 
 bool create (const char *file , unsigned initial_size)
 {
+	if (file == NULL) {
+      exit(-1);
+  	} 
+	bool return_code;
 	check_address(file);
-	return filesys_create(file, initial_size);
+	if (!lock_held_by_current_thread(&filesys_lock))
+		lock_acquire(&filesys_lock);
+  	return_code = filesys_create(file, initial_size);
+	if (lock_held_by_current_thread(&filesys_lock))
+		lock_release(&filesys_lock);
+    return return_code;
 }
 
 bool remove (const char *file)
 {
 	bool return_code;
 	check_address(file);
-	lock_acquire(&filesys_lock);
+	if (!lock_held_by_current_thread(&filesys_lock))
+		lock_acquire(&filesys_lock);
 	return_code = filesys_remove(file);
-	lock_release(&filesys_lock);
+	if (lock_held_by_current_thread(&filesys_lock))
+		lock_release(&filesys_lock);
 	return return_code;
 }
 
 int open (const char *file)
 {
 	check_address(file);
+	if (!lock_held_by_current_thread(&filesys_lock))
+		lock_acquire(&filesys_lock);
 	struct file *fileobj = filesys_open(file);
 
 	if (fileobj == NULL)
 	{
+		if (lock_held_by_current_thread(&filesys_lock))
+			lock_release(&filesys_lock);
 		return -1;
 	}
 	int fd = process_add_file(fileobj);
@@ -209,7 +224,8 @@ int open (const char *file)
 	{
 		file_close(fileobj);
 	}
-
+	if (lock_held_by_current_thread(&filesys_lock))
+		lock_release(&filesys_lock);
 	return fd;
 }
 
@@ -220,7 +236,12 @@ int filesize(int fd)
 	{
 		return -1;
 	}
-	return file_length(open_file);
+	if (!lock_held_by_current_thread(&filesys_lock))
+		lock_acquire(&filesys_lock);
+	int length = file_length(open_file);
+	if (lock_held_by_current_thread(&filesys_lock))
+		lock_release(&filesys_lock);
+	return length;
 }
 int read(int fd, void *buffer, unsigned size)
 {
@@ -231,7 +252,8 @@ int read(int fd, void *buffer, unsigned size)
 	}
 	off_t read_byte = 0;
 	uint8_t *read_buffer = (char *)buffer;
-	lock_acquire(&filesys_lock);
+	if (!lock_held_by_current_thread(&filesys_lock))
+		lock_acquire(&filesys_lock);
 	if (fd == 0)
 	{
 		char key;
@@ -247,7 +269,8 @@ int read(int fd, void *buffer, unsigned size)
 	}
 	else if (fd == 1)
 	{
-		lock_release(&filesys_lock);
+		if (lock_held_by_current_thread(&filesys_lock))
+			lock_release(&filesys_lock);
 		return -1;
 	}
 	else
@@ -255,12 +278,14 @@ int read(int fd, void *buffer, unsigned size)
 		struct file *read_file = process_get_file(fd);
 		if (read_file == NULL)
 		{
-			lock_release(&filesys_lock);
+			if (lock_held_by_current_thread(&filesys_lock))
+				lock_release(&filesys_lock);
 			return -1;
 		}
 		read_byte = file_read(read_file, buffer, size);
 	}
-	lock_release(&filesys_lock);
+	if (lock_held_by_current_thread(&filesys_lock))
+		lock_release(&filesys_lock);
 	return read_byte;
 }
 
@@ -270,28 +295,33 @@ int write(int fd, const void *buffer, unsigned size)
 	check_address(buffer);
 	struct file *write_file = process_get_file(fd);
 	int bytes_write;
-	lock_acquire(&filesys_lock);
+	if (!lock_held_by_current_thread(&filesys_lock))
+		lock_acquire(&filesys_lock);
 	if(fd < 2)
 	{
 		if (fd == 1)
 		{
 			putbuf(buffer, size);
 			bytes_write = size;
-			lock_release(&filesys_lock);
+			if (lock_held_by_current_thread(&filesys_lock))
+				lock_release(&filesys_lock);
 			return size;
 		}
-		lock_release(&filesys_lock);
+		if (lock_held_by_current_thread(&filesys_lock))
+			lock_release(&filesys_lock);
 		return -1;
 	}
 	else
 	{
 		if (write_file == NULL){
-			lock_release(&filesys_lock);
+			if (lock_held_by_current_thread(&filesys_lock))
+				lock_release(&filesys_lock);
 			return -1;
 		}
 		bytes_write = file_write(write_file, buffer, size);
 	}
-	lock_release(&filesys_lock);
+	if (lock_held_by_current_thread(&filesys_lock))
+		lock_release(&filesys_lock);
 	return bytes_write;
 }
 
@@ -335,13 +365,17 @@ void close (int fd)
 	{
 		return;
 	}
+	if (!lock_held_by_current_thread(&filesys_lock))
+		lock_acquire(&filesys_lock);
 	file_close(close_file);
+	if (lock_held_by_current_thread(&filesys_lock))
+		lock_release(&filesys_lock);
 	process_close_file(fd);
 }
 
 void *mmap(void *addr, size_t length, int writable, int fd, off_t offset)
 {
-	if (pg_ofs(addr) != 0 || (uint64_t)addr <= 0 || is_kernel_vaddr(addr))
+	if (pg_ofs(addr) != 0 || (uint64_t)addr <= 0 || is_kernel_vaddr(addr) || pg_ofs(offset) != 0)
 		return NULL;
 	if (is_kernel_vaddr((uint64_t)addr + length) || (uint64_t)addr + length <= 0 || pg_ofs(offset) != 0)
 		return NULL;

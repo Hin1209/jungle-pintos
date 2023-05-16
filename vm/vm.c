@@ -192,7 +192,7 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 	struct page *page = NULL;
 	uint64_t user_rsp = thread_current()->user_rsp;
 	if (not_present) { //페이지가 없어서
-		if(user_rsp -8 == addr || pg_round_down(user_rsp)== pg_round_down(addr)||(user_rsp<addr && addr<USER_STACK)){
+		if (user_rsp - 8 == addr || (USER_STACK - (1 << 20) <= user_rsp && user_rsp < addr && addr < USER_STACK)){
 			vm_stack_growth(addr);
 			return true;
 		}

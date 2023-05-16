@@ -7,6 +7,7 @@
 #include <string.h>
 #include "userprog/gdt.h"
 #include "userprog/tss.h"
+#include "userprog/syscall.h"
 #include "filesys/directory.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
@@ -304,6 +305,8 @@ __do_fork(void *aux)
 	 * TODO:       from the fork() until this function successfully duplicates
 	 * TODO:       the resources of parent.*/
 	// FDT복사 next_fd  fdt
+	if (!lock_held_by_current_thread(&filesys_lock))
+		lock_acquire(&filesys_lock);
 	if (parent->next_fd == FDCOUNT_LIMIT)
 		goto error;
 	//process_init ();
@@ -323,6 +326,8 @@ __do_fork(void *aux)
 			current->fdt[i] = new_file;
 		}
 	}
+	if (lock_held_by_current_thread(&filesys_lock))
+		lock_release(&filesys_lock);
 	current->next_fd = parent->next_fd;
 	// child loaded successfully, wake up parent in process_fork
 	sema_up(&current->load_sema);
@@ -353,6 +358,8 @@ int process_exec(void *f_name)
 	_if.ds = _if.es = _if.ss = SEL_UDSEG;
 	_if.cs = SEL_UCSEG;
 	_if.eflags = FLAG_IF | FLAG_MBS;
+	if (!lock_held_by_current_thread(&filesys_lock))
+		lock_acquire(&filesys_lock);
 
 	/* We first kill the current context */
 	process_cleanup();
@@ -370,6 +377,8 @@ int process_exec(void *f_name)
 	}
 	/* And then load the binary */
 	success = load(file_name, &_if);
+	if (lock_held_by_current_thread(&filesys_lock))
+		lock_release(&filesys_lock);
 
 	/* If load failed, quit. */
 
@@ -874,7 +883,6 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 	ASSERT(pg_ofs(upage) == 0);
 	ASSERT(ofs % PGSIZE == 0);
 
-	file_seek(file, ofs);
 	while (read_bytes > 0 || zero_bytes > 0)
 	{
 		/* Do calculate how to fill this page.
