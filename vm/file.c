@@ -80,11 +80,15 @@ static bool lazy_load(struct page *page, void *aux_)
 	uint32_t read_bytes = aux->read_bytes;
 	uint32_t zero_bytes = aux->zero_bytes;
 	free(aux);
-
+	bool is_lock_held = lock_held_by_current_thread(&filesys_lock);
+	if (!is_lock_held)
+		lock_acquire(&filesys_lock);
 	file_seek(file, ofs);
 	read_bytes = file_read(file, page->frame->kva, read_bytes);
 	// page->file.read_bytes = read_bytes;
 	// page->file.zero_bytes = PGSIZE - read_bytes;
+	if (!is_lock_held)
+		lock_release(&filesys_lock);
 
 	memset(page->frame->kva + read_bytes, 0, zero_bytes);
 	return true;

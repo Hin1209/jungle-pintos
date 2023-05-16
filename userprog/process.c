@@ -349,8 +349,6 @@ int process_exec(void *f_name)
 	_if.cs = SEL_UCSEG;
 	_if.eflags = FLAG_IF | FLAG_MBS;
 
-	if (!lock_held_by_current_thread(&filesys_lock))
-		lock_acquire(&filesys_lock);
 	/* We first kill the current context */
 	process_cleanup();
 
@@ -366,8 +364,11 @@ int process_exec(void *f_name)
 		count++;
 	}
 	/* And then load the binary */
+	bool is_lock_held = lock_held_by_current_thread(&filesys_lock);
+	if (!is_lock_held)
+		lock_acquire(&filesys_lock);
 	success = load(file_name, &_if);
-	if (lock_held_by_current_thread(&filesys_lock))
+	if (!is_lock_held)
 		lock_release(&filesys_lock);
 
 	/* If load failed, quit. */
@@ -820,13 +821,17 @@ lazy_load_segment(struct page *page, void *aux_)
 	uint32_t read_bytes = aux->read_bytes;
 	uint32_t zero_bytes = aux->zero_bytes;
 	free(aux);
-
+	bool is_lock_held = lock_held_by_current_thread(&filesys_lock);
+	if (!is_lock_held)
+		lock_acquire(&filesys_lock);
 	file_seek(file, ofs);
 	if (file_read(file, page->frame->kva, read_bytes) != (int)read_bytes)
 	{
 		// error handle
 		return false;
 	}
+	if (!is_lock_held)
+		lock_release(&filesys_lock);
 	memset(page->frame->kva + read_bytes, 0, zero_bytes);
 	return true;
 }
