@@ -81,14 +81,10 @@ static bool lazy_load(struct page *page, void *aux_)
 	uint32_t zero_bytes = aux->zero_bytes;
 	free(aux);
 
-	if (!lock_held_by_current_thread(&filesys_lock))
-		lock_acquire(&filesys_lock);
 	file_seek(file, ofs);
 	read_bytes = file_read(file, page->frame->kva, read_bytes);
 	// page->file.read_bytes = read_bytes;
 	// page->file.zero_bytes = PGSIZE - read_bytes;
-	if (lock_held_by_current_thread(&filesys_lock))
-		lock_release(&filesys_lock);
 
 	memset(page->frame->kva + read_bytes, 0, zero_bytes);
 	return true;
@@ -101,8 +97,6 @@ do_mmap(void *addr, size_t length, int writable,
 {
 	int cnt_page = length % PGSIZE ? length / PGSIZE + 1 : length / PGSIZE;
 	size_t length_ = length;
-	if (!lock_held_by_current_thread(&filesys_lock))
-		lock_acquire(&filesys_lock);
 	off_t ofs = file_length(file);
 	if (ofs < offset)
 		return NULL;
@@ -133,8 +127,6 @@ do_mmap(void *addr, size_t length, int writable,
 
 		vm_alloc_page_with_initializer(VM_FILE, addr + i * PGSIZE, writable, lazy_load, aux);
 	}
-	if (lock_held_by_current_thread(&filesys_lock))
-		lock_release(&filesys_lock);
 
 	return addr;
 }
