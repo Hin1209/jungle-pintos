@@ -3,6 +3,7 @@
 #include "threads/vaddr.h"
 #include "threads/malloc.h"
 #include "threads/mmu.h"
+#include "userprog/syscall.h"
 #include "vm/vm.h"
 #include "vm/inspect.h"
 #include "vm/file.h"
@@ -187,9 +188,9 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 		user_rsp = thread_current()->user_rsp;
 	if (not_present)
 	{
-		if (user_rsp - 8 == addr || pg_round_down(user_rsp) == pg_round_down(addr) || (user_rsp < addr && addr < USER_STACK))
+		if (user_rsp - 8 == addr || (user_rsp < addr && addr < USER_STACK))
 		{
-			vm_stack_growth(addr);
+			vm_stack_growth(pg_round_down(addr));
 			return true;
 		}
 		page = spt_find_page(spt, pg_round_down(addr));
@@ -292,6 +293,8 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 	struct page *newpage;
 	void *aux;
 	hash_first(&i, &src->spt_hash);
+	if (!lock_held_by_current_thread(&filesys_lock))
+		lock_acquire(&filesys_lock);
 	while (hash_next(&i))
 	{
 		struct page *page = hash_entry(hash_cur(&i), struct page, page_elem);
@@ -326,6 +329,8 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 			break;
 		}
 	}
+	if (lock_held_by_current_thread(&filesys_lock))
+		lock_release(&filesys_lock);
 	return true;
 }
 
