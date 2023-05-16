@@ -7,6 +7,7 @@
 #include <string.h>
 #include "userprog/gdt.h"
 #include "userprog/tss.h"
+#include "userprog/syscall.h"
 #include "filesys/directory.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
@@ -301,6 +302,8 @@ __do_fork(void *aux)
 	 * TODO:       from the fork() until this function successfully duplicates
 	 * TODO:       the resources of parent.*/
 	// FDT복사
+	if (!lock_held_by_current_thread(&filesys_lock))
+		lock_acquire(&filesys_lock);
 	for (int i = 0; i < FDT_COUNT; i++)
 	{
 		struct file *file = parent->fdt[i];
@@ -314,6 +317,8 @@ __do_fork(void *aux)
 		}
 		current->fdt[i] = file;
 	}
+	if (lock_held_by_current_thread(&filesys_lock))
+		lock_release(&filesys_lock);
 	current->next_fd = parent->next_fd;
 
 	// 로드가 완료될 때까지 기다리고 있던 부모 대기 해제
@@ -344,6 +349,8 @@ int process_exec(void *f_name)
 	_if.cs = SEL_UCSEG;
 	_if.eflags = FLAG_IF | FLAG_MBS;
 
+	if (!lock_held_by_current_thread(&filesys_lock))
+		lock_acquire(&filesys_lock);
 	/* We first kill the current context */
 	process_cleanup();
 
@@ -360,6 +367,8 @@ int process_exec(void *f_name)
 	}
 	/* And then load the binary */
 	success = load(file_name, &_if);
+	if (lock_held_by_current_thread(&filesys_lock))
+		lock_release(&filesys_lock);
 
 	/* If load failed, quit. */
 
@@ -422,8 +431,12 @@ void process_exit(void)
 		}
 	}
 	palloc_free_multiple(curr->fdt, 3);
+	if (!lock_held_by_current_thread(&filesys_lock))
+		lock_acquire(&filesys_lock);
 	file_close(curr->running);
 	process_cleanup();
+	if (lock_held_by_current_thread(&filesys_lock))
+		lock_release(&filesys_lock);
 	hash_destroy(&curr->spt.spt_hash, NULL);
 	sema_up(&curr->wait_sema);
 	sema_down(&curr->exit_sema);
@@ -436,7 +449,11 @@ process_cleanup(void)
 	struct thread *curr = thread_current();
 
 #ifdef VM
+	if (!lock_held_by_current_thread(&filesys_lock))
+		lock_acquire(&filesys_lock);
 	supplemental_page_table_kill(&curr->spt);
+	if (lock_held_by_current_thread(&filesys_lock))
+		lock_release(&filesys_lock);
 #endif
 
 	uint64_t *pml4;
@@ -734,7 +751,6 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 			return false;
 
 		/* Load this page. */
-		// printf("file tell: %d\n", file_tell(file));
 		if (file_read(file, kpage, page_read_bytes) != (int)page_read_bytes)
 		{
 			palloc_free_page(kpage);
@@ -813,12 +829,16 @@ lazy_load_segment(struct page *page, void *aux_)
 	uint32_t zero_bytes = aux->zero_bytes;
 	free(aux);
 
+	if (!lock_held_by_current_thread(&filesys_lock))
+		lock_acquire(&filesys_lock);
 	file_seek(file, ofs);
 	if (file_read(file, page->frame->kva, read_bytes) != (int)read_bytes)
 	{
 		// error handle
 		return false;
 	}
+	if (lock_held_by_current_thread(&filesys_lock))
+		lock_release(&filesys_lock);
 	memset(page->frame->kva + read_bytes, 0, zero_bytes);
 	return true;
 }
@@ -845,7 +865,6 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 	ASSERT(pg_ofs(upage) == 0);
 	ASSERT(ofs % PGSIZE == 0);
 
-	file_seek(file, ofs);
 	while (read_bytes > 0 || zero_bytes > 0)
 	{
 		/* Do calculate how to fill this page.
