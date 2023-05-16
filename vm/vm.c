@@ -298,7 +298,7 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 				vm_alloc_page_with_initializer(page->operations->type, page->va, page->writable, NULL, NULL);
 				vm_claim_page(page->va);
 				newpage = spt_find_page(dst, page->va);
-				memcpy(newpage->va, page->frame->kva, PGSIZE);
+				memcpy(newpage->frame->kva, page->frame->kva, PGSIZE);
 				break;
 			case VM_FILE:
 				newpage = malloc(sizeof(struct page));

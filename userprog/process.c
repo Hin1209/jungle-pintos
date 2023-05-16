@@ -824,14 +824,24 @@ lazy_load_segment(struct page *page, void *aux_)
 
 	file_seek(file, ofs);
 
-	if (file_read(file, page->va, read_bytes) != (int)read_bytes)
+	if (file_read(file, page->frame->kva, read_bytes) != (int)read_bytes)
 	{
 		// error handle
 		return false;
 	}
-	memset(page->va + read_bytes, 0, zero_bytes);
+	memset(page->frame->kva + read_bytes, 0, zero_bytes);
 	return true;
 }
+/*
+struct frame의 정의에서 void *kva는 프레임이 매핑되는 커널 가상 주소를 가리키는 포인터입니다. 
+페이지의 세그먼트를 파일로부터 로드하기 위해 file_read 함수를 사용하여 데이터를 읽을 때,
+읽은 데이터를 페이지의 가상 주소(page->va)가 아니라 프레임의 커널 가상 주소(page->frame->kva)에 쓰는 것이 올바릅니다.
+
+file_read 함수를 호출할 때 page->frame->kva를 대상으로 지정하여 데이터를 읽고,
+memset 함수를 호출할 때도 page->frame->kva를 대상으로 지정하여 0으로 초기화하고 있습니다.
+이는 프레임에 세그먼트 데이터를 로드하는 올바른 방법입니다.
+
+*/
 
 /* Loads a segment starting at offset OFS in FILE at address
  * UPAGE.  In total, READ_BYTES + ZERO_BYTES bytes of virtual
@@ -892,6 +902,10 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 	}
 	return true;
 }
+
+
+
+
 
 /* Create a PAGE of stack at the USER_STACK. Return true on success. */
 static bool
