@@ -186,11 +186,9 @@ bool create(const char *file, unsigned initial_size)
 	- initial_size: 생성할 파일 크기
 	*/
 	check_address(file);
-	if (!lock_held_by_current_thread(&filesys_lock))
-		lock_acquire(&filesys_lock);
+	lock_acquire(&filesys_lock);
 	bool success = filesys_create(file, initial_size);
-	if (lock_held_by_current_thread(&filesys_lock))
-		lock_release(&filesys_lock);
+	lock_release(&filesys_lock);
 	return success;
 }
 
@@ -202,11 +200,9 @@ bool remove(const char *file)
 	- 성공 일 경우 true, 실패 일 경우 false 리턴
 	*/
 	check_address(file);
-	if (!lock_held_by_current_thread(&filesys_lock))
-		lock_acquire(&filesys_lock);
+	lock_acquire(&filesys_lock);
 	bool success = filesys_remove(file);
-	if (lock_held_by_current_thread(&filesys_lock))
-		lock_release(&filesys_lock);
+	lock_release(&filesys_lock);
 	return success;
 }
 
@@ -217,15 +213,13 @@ int open(const char *file)
 {
 	check_address(file);
 	/* 파일을 open */
-	if (!lock_held_by_current_thread(&filesys_lock))
-		lock_acquire(&filesys_lock);
+	lock_acquire(&filesys_lock);
 	struct file *fileobj = filesys_open(file);
 
 	/* 해당 파일이 존재하지 않으면 -1 리턴 */
 	if (fileobj == NULL)
 	{
-		if (lock_held_by_current_thread(&filesys_lock))
-			lock_release(&filesys_lock);
+		lock_release(&filesys_lock);
 		return -1;
 	}
 	/* 해당 파일 객체에 파일 디스크립터 부여 */
@@ -236,8 +230,7 @@ int open(const char *file)
 		file_close(fileobj);
 	}
 	/* 파일 디스크립터 리턴 */
-	if (lock_held_by_current_thread(&filesys_lock))
-		lock_release(&filesys_lock);
+	lock_release(&filesys_lock);
 	return fd;
 }
 
@@ -251,11 +244,9 @@ int filesize(int fd)
 	{
 		return -1;
 	}
-	if (!lock_held_by_current_thread(&filesys_lock))
-		lock_acquire(&filesys_lock);
+	lock_acquire(&filesys_lock);
 	int length = file_length(open_file);
-	if (lock_held_by_current_thread(&filesys_lock))
-		lock_release(&filesys_lock);
+	lock_release(&filesys_lock);
 	return length;
 }
 /*
@@ -269,8 +260,7 @@ int read(int fd, void *buffer, unsigned size)
 		exit(-1);
 	off_t read_byte = 0;
 	uint8_t *read_buffer = (char *)buffer;
-	if (!lock_held_by_current_thread(&filesys_lock))
-		lock_acquire(&filesys_lock);
+	lock_acquire(&filesys_lock);
 	if (fd == 0)
 	{
 		char key;
@@ -286,8 +276,7 @@ int read(int fd, void *buffer, unsigned size)
 	}
 	else if (fd == 1)
 	{
-		if (lock_held_by_current_thread(&filesys_lock))
-			lock_release(&filesys_lock);
+		lock_release(&filesys_lock);
 		return -1;
 	}
 	else
@@ -295,14 +284,12 @@ int read(int fd, void *buffer, unsigned size)
 		struct file *read_file = process_get_file(fd);
 		if (read_file == NULL)
 		{
-			if (lock_held_by_current_thread(&filesys_lock))
-				lock_release(&filesys_lock);
+			lock_release(&filesys_lock);
 			return -1;
 		}
 		read_byte = file_read(read_file, buffer, size);
 	}
-	if (lock_held_by_current_thread(&filesys_lock))
-		lock_release(&filesys_lock);
+	lock_release(&filesys_lock);
 	return read_byte;
 }
 
@@ -314,34 +301,29 @@ int write(int fd, const void *buffer, unsigned size)
 	check_address(buffer);
 	struct file *write_file = process_get_file(fd);
 	int bytes_write;
-	if (!lock_held_by_current_thread(&filesys_lock))
-		lock_acquire(&filesys_lock);
+	lock_acquire(&filesys_lock);
 	if (fd < 2)
 	{
 		if (fd == 1)
 		{
 			putbuf(buffer, size);
 			bytes_write = size;
-			if (lock_held_by_current_thread(&filesys_lock))
-				lock_release(&filesys_lock);
+			lock_release(&filesys_lock);
 			return size;
 		}
-		if (lock_held_by_current_thread(&filesys_lock))
-			lock_release(&filesys_lock);
+		lock_release(&filesys_lock);
 		return -1;
 	}
 	else
 	{
 		if (write_file == NULL)
 		{
-			if (lock_held_by_current_thread(&filesys_lock))
-				lock_release(&filesys_lock);
+			lock_release(&filesys_lock);
 			return -1;
 		}
 		bytes_write = file_write(write_file, buffer, size);
 	}
-	if (lock_held_by_current_thread(&filesys_lock))
-		lock_release(&filesys_lock);
+	lock_release(&filesys_lock);
 	return bytes_write;
 }
 
@@ -393,11 +375,9 @@ void close(int fd)
 	{
 		return;
 	}
-	if (!lock_held_by_current_thread(&filesys_lock))
-		lock_acquire(&filesys_lock);
+	lock_acquire(&filesys_lock);
 	file_close(close_file);
-	if (lock_held_by_current_thread(&filesys_lock))
-		lock_release(&filesys_lock);
+	lock_release(&filesys_lock);
 	process_close_file(fd);
 }
 
