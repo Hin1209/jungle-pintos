@@ -126,17 +126,17 @@ vm_get_victim(void)
 	/* TODO: The policy for eviction is up to you. */
 	for (struct list_elem *e = list_begin(&frame_table); e != list_end(&frame_table); e = list_next(e))
 	{
-		struct page *page = list_entry(e, struct page, out_elem);
-		if (!pml4_is_accessed(page->pml4, page->va))
+		struct frame *frame = list_entry(e, struct frame, frame_elem);
+		if (!pml4_is_accessed(frame->page->pml4, frame->page->va))
 		{
-			swap_out(page);
-			return page->frame;
+			swap_out(frame->page);
+			return frame;
 		}
 		else
-			pml4_set_accessed(page->pml4, page->va, 0);
+			pml4_set_accessed(frame->page->pml4, frame->page->va, 0);
 	}
 
-	return victim;
+	return list_entry(list_front(&frame_table), struct frame, frame_elem);
 }
 
 /* Evict one page and return the corresponding frame.

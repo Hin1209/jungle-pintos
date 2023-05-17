@@ -69,6 +69,7 @@ anon_swap_in(struct page *page, void *kva)
 	}
 	list_push_back(&swap_slot_list, &slot->slot_elem);
 	lock_release(&swap_lock);
+	return true;
 }
 
 /* Swap out the page by writing contents to the swap disk. */
@@ -78,9 +79,10 @@ anon_swap_out(struct page *page)
 	struct anon_page *anon_page = &page->anon;
 	anon_page->slot = list_entry(list_pop_front(&swap_slot_list), struct swap_slot, slot_elem);
 	lock_acquire(&swap_lock);
-	while (!list_empty(&page->frame->page_list))
+	struct frame *frame = page->frame;
+	while (!list_empty(&frame->page_list))
 	{
-		struct page *out_page = list_entry(list_pop_front(&page->frame->page_list), struct page, out_elem);
+		struct page *out_page = list_entry(list_pop_front(&frame->page_list), struct page, out_elem);
 		list_push_back(&anon_page->slot, &out_page->out_elem);
 		out_page->anon.slot = anon_page->slot;
 		if (pml4_is_dirty(out_page->pml4, out_page->va))
@@ -93,6 +95,7 @@ anon_swap_out(struct page *page)
 		pml4_clear_page(out_page->pml4, out_page->va);
 	}
 	lock_release(&swap_lock);
+	return true;
 }
 
 /* Destroy the anonymous page. PAGE will be freed by the caller. */
