@@ -51,7 +51,9 @@ struct page
 
 	/* Your implementation */
 	struct hash_elem page_elem;
+	struct list_elem out_elem;
 	bool writable;
+	uint64_t *pml4;
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */
 	union
@@ -70,6 +72,7 @@ struct frame
 {
 	void *kva;
 	struct page *page;
+	struct list page_list;
 	struct list_elem frame_elem;
 	int cnt_page;
 };

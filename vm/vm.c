@@ -124,6 +124,17 @@ vm_get_victim(void)
 {
 	struct frame *victim = NULL;
 	/* TODO: The policy for eviction is up to you. */
+	for (struct list_elem *e = list_begin(&frame_table); e != list_end(&frame_table); e = list_next(e))
+	{
+		struct page *page = list_entry(e, struct page, out_elem);
+		if (!pml4_is_accessed(page->pml4, page->va))
+		{
+			swap_out(page);
+			return page->frame;
+		}
+		else
+			pml4_set_accessed(page->pml4, page->va, 0);
+	}
 
 	return victim;
 }
@@ -136,7 +147,7 @@ vm_evict_frame(void)
 	struct frame *victim UNUSED = vm_get_victim();
 	/* TODO: swap out the victim and return the evicted frame. */
 
-	return NULL;
+	return victim;
 }
 
 /* palloc() and get frame. If there is no available page, evict the page
@@ -150,12 +161,19 @@ vm_get_frame(void)
 	frame = calloc(1, sizeof(struct frame));
 	void *upage = palloc_get_page(PAL_USER | PAL_ZERO);
 	if (upage == NULL)
-		PANIC("not implemented!"); // evict 구현
+	{
+		free(frame);
+		frame = vm_evict_frame();
+		list_remove(&frame->frame_elem);
+		list_push_back(&frame_table, &frame->frame_elem);
+		frame->page = NULL;
+	}
 	else
 	{
 		frame->page = NULL;
 		frame->kva = upage;
 		list_push_back(&frame_table, &frame->frame_elem);
+		list_init(&frame->page_list);
 	}
 
 	ASSERT(frame != NULL);
@@ -257,8 +275,6 @@ vm_do_claim_page(struct page *page)
 			PANIC("FAIL");
 		break;
 	case VM_ANON:
-		if (!install_page(page->va, frame->kva, page->writable))
-			PANIC("FAIL");
 		break;
 	case VM_FILE:
 		break;
