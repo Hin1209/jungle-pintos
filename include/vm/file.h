@@ -13,6 +13,7 @@ struct file_page
 	int file_length;
 	int read_bytes;
 	int zero_bytes;
+	struct list *file_list;
 };
 
 struct file_load

@@ -46,6 +46,19 @@ static bool
 file_backed_swap_in(struct page *page, void *kva)
 {
 	struct file_page *file_page UNUSED = &page->file;
+	struct list *file_list = file_page->file_list;
+	struct frame *frame = page->frame;
+	lock_acquire(&filesys_lock);
+	file_read_at(file_page->file, page->va, file_page->read_bytes, file_page->ofs);
+	lock_release(&filesys_lock);
+	while (!list_empty(file_list))
+	{
+		struct page *in_page = list_entry(list_pop_front(file_list), struct page, out_elem);
+		list_push_back(&frame->page_list, &in_page->out_elem);
+		pml4_set_page(in_page->pml4, in_page->va, frame->kva, in_page->writable);
+	}
+	free(file_list);
+	return true;
 }
 
 /* Swap out the page by writeback contents to the file. */
@@ -53,6 +66,21 @@ static bool
 file_backed_swap_out(struct page *page)
 {
 	struct file_page *file_page UNUSED = &page->file;
+	struct list *file_list = malloc(sizeof(struct list));
+	list_init(file_list);
+	file_page->file_list = file_list;
+	struct frame *frame = page->frame;
+	lock_acquire(&filesys_lock);
+	while (!list_empty(&frame->page_list))
+	{
+		struct page *out_page = list_entry(list_pop_front(&frame->page_list), struct page, out_elem);
+		if (pml4_is_dirty(out_page->pml4, out_page->va))
+			file_write_at(out_page->file.file, out_page->va, out_page->file.read_bytes, out_page->file.ofs);
+		list_push_back(file_list, &out_page->out_elem);
+		pml4_clear_page(out_page->pml4, out_page->va);
+	}
+	lock_release(&filesys_lock);
+	return true;
 }
 
 /* Destory the file backed page. PAGE will be freed by the caller. */
