@@ -13,6 +13,8 @@ struct file_page
 	int file_length;
 	int read_bytes;
 	int zero_bytes;
+	struct list_elem file_elem;
+	uint64_t *pml4;
 };
 
 struct file_load
