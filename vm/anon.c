@@ -1,12 +1,14 @@
 /* anon.c: Implementation of page for non-disk image (a.k.a. anonymous page). */
 
 #include "vm/vm.h"
+#include "threads/vaddr.h"
 #include "devices/disk.h"
 
 /* DO NOT MODIFY BELOW LINE */
 static struct disk *swap_disk;
 static struct list swap_slot_list;
 static struct lock swap_lock;
+static char *zero_set[PGSIZE];
 static bool anon_swap_in(struct page *page, void *kva);
 static bool anon_swap_out(struct page *page);
 static void anon_destroy(struct page *page);
@@ -33,6 +35,7 @@ void vm_anon_init(void)
 		slot->start_sector = i;
 		list_push_back(&swap_slot_list, &slot->slot_elem);
 	}
+	memset(zero_set, 0, PGSIZE);
 }
 
 /* Initialize the file mapping */
@@ -55,20 +58,24 @@ anon_swap_in(struct page *page, void *kva)
 	struct anon_page *anon_page = &page->anon;
 	struct list *page_list = &anon_page->slot->page_list;
 	struct swap_slot *slot = anon_page->slot;
-	lock_acquire(&swap_lock);
+	int read = 0;
 	while (!list_empty(page_list))
 	{
 		struct page *in_page = list_entry(list_pop_front(page_list), struct page, out_elem);
-		for (int i = 0; i < SLOT_SIZE; i++)
+		pml4_set_page(in_page->pml4, in_page->va, page->frame->kva, in_page->writable);
+		if (read++ == 0)
 		{
-			disk_read(swap_disk, in_page->anon.slot->start_sector + i, in_page->va + DISK_SECTOR_SIZE * i);
+			for (int i = 0; i < SLOT_SIZE; i++)
+			{
+				disk_read(swap_disk, in_page->anon.slot->start_sector + i, in_page->va + DISK_SECTOR_SIZE * i);
+				disk_write(swap_disk, in_page->anon.slot->start_sector + i, zero_set + DISK_SECTOR_SIZE * i);
+			}
 		}
 		in_page->frame = page->frame;
 		page->frame->cnt_page += 1;
 		list_push_back(&page->frame->page_list, &in_page->out_elem);
 	}
 	list_push_back(&swap_slot_list, &slot->slot_elem);
-	lock_release(&swap_lock);
 	return true;
 }
 
@@ -78,23 +85,20 @@ anon_swap_out(struct page *page)
 {
 	struct anon_page *anon_page = &page->anon;
 	anon_page->slot = list_entry(list_pop_front(&swap_slot_list), struct swap_slot, slot_elem);
-	lock_acquire(&swap_lock);
 	struct frame *frame = page->frame;
+	int dirty = 0;
 	while (!list_empty(&frame->page_list))
 	{
 		struct page *out_page = list_entry(list_pop_front(&frame->page_list), struct page, out_elem);
-		list_push_back(&anon_page->slot, &out_page->out_elem);
+		frame->cnt_page -= 1;
+		list_push_back(&anon_page->slot->page_list, &out_page->out_elem);
 		out_page->anon.slot = anon_page->slot;
-		if (pml4_is_dirty(out_page->pml4, out_page->va))
+		for (int i = 0; i < SLOT_SIZE; i++)
 		{
-			for (int i = 0; i < SLOT_SIZE; i++)
-			{
-				disk_write(swap_disk, out_page->anon.slot->start_sector + i, out_page->va + DISK_SECTOR_SIZE * i);
-			}
+			disk_write(swap_disk, out_page->anon.slot->start_sector + i, out_page->va + DISK_SECTOR_SIZE * i);
 		}
 		pml4_clear_page(out_page->pml4, out_page->va);
 	}
-	lock_release(&swap_lock);
 	return true;
 }
 
