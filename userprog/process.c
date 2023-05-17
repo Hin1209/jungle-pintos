@@ -421,6 +421,9 @@ void process_exit(void)
 {
 	struct thread *curr = thread_current(); // 자식
 
+	bool is_lock_held = lock_held_by_current_thread(&filesys_lock);
+	if (!is_lock_held)
+		lock_acquire(&filesys_lock);
 	for (int i = 2; i < FDT_COUNT; i++)
 	{
 		/* 현재 파일 디스크립터가 열린 상태인 경우 */
@@ -428,7 +431,7 @@ void process_exit(void)
 		{
 			/* 해당 파일 디스크립터를 닫음 */
 			/* 파일 테이블에서 해당 파일 디스크립터를 제거 */
-			close(i);
+			file_close(curr->fdt[i]);
 		}
 	}
 	sema_up(&curr->wait_sema);
@@ -436,6 +439,8 @@ void process_exit(void)
 	file_close(curr->running);
 	process_cleanup();
 	hash_destroy(&curr->spt.spt_hash, NULL);
+	if (!is_lock_held)
+		lock_release(&filesys_lock);
 	sema_down(&curr->exit_sema);
 }
 
