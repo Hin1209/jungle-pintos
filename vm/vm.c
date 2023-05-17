@@ -257,8 +257,6 @@ vm_do_claim_page(struct page *page)
 			PANIC("FAIL");
 		break;
 	case VM_ANON:
-		if (!install_page(page->va, frame->kva, page->writable))
-			PANIC("FAIL");
 		break;
 	case VM_FILE:
 		break;
