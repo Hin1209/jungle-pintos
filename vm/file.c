@@ -36,6 +36,8 @@ bool file_backed_initializer(struct page *page, enum vm_type type, void *kva)
 	file_page->read_bytes = aux->read_bytes;
 	file_page->zero_bytes = aux->zero_bytes;
 	file_page->file_length = aux->file_length;
+	page->pml4 = thread_current()->pml4;
+	list_push_back(&page->frame->page_list, &page->out_elem);
 	return true;
 }
 

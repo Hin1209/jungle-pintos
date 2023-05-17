@@ -12,8 +12,6 @@ struct anon_page
 {
     void *aux;
     struct swap_slot *slot;
-    struct list_elem anon_elem;
-    uint64_t *pml4;
     // 디스크로 쫓겨난 위치 정보
 };
 
