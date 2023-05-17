@@ -42,7 +42,6 @@
    - up or "V": increment the value (and wake up one waiting
    thread, if any). */
 
-
 void sema_init(struct semaphore *sema, unsigned value)
 {
 	ASSERT(sema != NULL);
@@ -121,7 +120,7 @@ void sema_up(struct semaphore *sema)
 		thread_unblock(list_entry(list_pop_front(&sema->waiters), struct thread, elem));
 	}
 	sema->value++;
-	preempt_priority(); 
+	preempt_priority();
 	intr_set_level(old_level);
 	// preempt_priority(); // unblock이 호출되며 ready_list가 수정되었으므로 선점 여부 확인
 }
@@ -267,9 +266,7 @@ struct semaphore_elem
 {
 	struct list_elem elem;		/* List element. */
 	struct semaphore semaphore; /* This semaphore. */
-
 };
-
 
 /* Initializes condition variable COND.  A condition variable
    allows one piece of code to signal a condition and cooperating
@@ -395,6 +392,8 @@ void donate_priority(void)
 		if (curr->wait_on_lock == NULL) // 더이상 중첩되지 않았으면 종료
 			return;
 		holder = curr->wait_on_lock->holder;
+		if (holder == NULL)
+			return;
 		if (holder->priority < priority)
 			holder->priority = priority;
 		curr = holder;
