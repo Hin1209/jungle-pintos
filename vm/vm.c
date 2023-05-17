@@ -126,17 +126,13 @@ vm_get_victim(void)
 	/* TODO: The policy for eviction is up to you. */
 	for (struct list_elem *e = list_begin(&frame_table); e != list_end(&frame_table); e = list_next(e))
 	{
-		struct page *page = list_entry(e, struct page, out_elem);
-		if (!pml4_is_accessed(page->pml4, page->va))
-		{
-			swap_out(page);
-			return page->frame;
-		}
+		struct frame *frame = list_entry(e, struct frame, frame_elem);
+		if (!pml4_is_accessed(frame->page->pml4, frame->page->va))
+			return frame;
 		else
-			pml4_set_accessed(page->pml4, page->va, 0);
+			pml4_set_accessed(frame->page->pml4, frame->page->va, 0);
 	}
-
-	return victim;
+	return list_entry(list_front(&frame_table), struct frame, frame_elem);
 }
 
 /* Evict one page and return the corresponding frame.
@@ -144,7 +140,7 @@ vm_get_victim(void)
 static struct frame *
 vm_evict_frame(void)
 {
-	struct frame *victim UNUSED = vm_get_victim();
+	struct frame *victim = vm_get_victim();
 	/* TODO: swap out the victim and return the evicted frame. */
 
 	return victim;
@@ -164,6 +160,7 @@ vm_get_frame(void)
 	{
 		free(frame);
 		frame = vm_evict_frame();
+		swap_out(frame->page);
 		list_remove(&frame->frame_elem);
 		list_push_back(&frame_table, &frame->frame_elem);
 		frame->page = NULL;
@@ -174,6 +171,7 @@ vm_get_frame(void)
 		frame->kva = upage;
 		list_push_back(&frame_table, &frame->frame_elem);
 		list_init(&frame->page_list);
+		frame->cnt_page = 1;
 	}
 
 	ASSERT(frame != NULL);
@@ -266,7 +264,6 @@ vm_do_claim_page(struct page *page)
 	/* Set links */
 	frame->page = page;
 	page->frame = frame;
-	frame->cnt_page = 1;
 
 	switch (VM_TYPE(page->operations->type))
 	{
@@ -279,7 +276,6 @@ vm_do_claim_page(struct page *page)
 	case VM_FILE:
 		break;
 	}
-
 	return swap_in(page, frame->kva);
 }
 
