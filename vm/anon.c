@@ -61,7 +61,10 @@ anon_swap_in(struct page *page, void *kva)
 	while (!list_empty(page_list))
 	{
 		struct page *in_page = list_entry(list_pop_front(page_list), struct page, out_elem);
-		pml4_set_page(in_page->pml4, in_page->va, page->frame->kva, in_page->writable);
+		if (in_page->write_protected)
+			pml4_set_page(in_page->pml4, in_page->va, page->frame->kva, 0);
+		else
+			pml4_set_page(in_page->pml4, in_page->va, page->frame->kva, in_page->writable);
 		if (read++ == 0)
 		{
 			for (int i = 0; i < SLOT_SIZE; i++)

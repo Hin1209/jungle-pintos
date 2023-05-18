@@ -193,6 +193,17 @@ vm_stack_growth(void *addr UNUSED)
 static bool
 vm_handle_wp(struct page *page UNUSED)
 {
+	pml4_clear_page(page->pml4, page->va);
+	page->frame->cnt_page -= 1;
+	if (page->frame->cnt_page == 1)
+	{
+		struct page *left_page = list_entry(list_front(&page->frame->page_list), struct page, out_elem);
+		pml4_clear_page(left_page->pml4, left_page->va);
+		pml4_set_page(left_page->pml4, left_page->va, left_page->frame->kva, 1);
+		left_page->write_protected = false;
+	}
+
+	list_remove(&page->out_elem);
 }
 
 /* Return true on success */
@@ -219,7 +230,11 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 	}
 	else if (write)
 	{
-		exit(-1);
+		page = spt_find_page(spt, pg_round_down(addr));
+		if (page->write_protected)
+			vm_handle_wp(page);
+		else
+			exit(-1);
 	}
 
 	return vm_do_claim_page(page);
@@ -266,6 +281,7 @@ vm_do_claim_page(struct page *page)
 	/* Set links */
 	frame->page = page;
 	page->frame = frame;
+	page->write_protected = false;
 
 	switch (VM_TYPE(page->operations->type))
 	{
@@ -322,17 +338,42 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 			vm_alloc_page_with_initializer(page->uninit.type, page->va, page->writable, page->uninit.init, aux);
 			break;
 		case VM_ANON:
-			vm_alloc_page_with_initializer(page->operations->type, page->va, page->writable, NULL, NULL);
-			vm_claim_page(page->va);
-			newpage = spt_find_page(dst, page->va);
+			newpage = malloc(sizeof(struct page));
+			newpage->va = page->va;
+			newpage->writable = page->writable;
+			newpage->operations = page->operations;
+			spt_insert_page(dst, newpage);
 			newpage->pml4 = thread_current()->pml4;
 			if (page->frame == NULL)
 			{
-				for (int i = 0; i < SLOT_SIZE; i++)
-					disk_read(swap_disk, page->anon.slot->start_sector + i, newpage->frame->kva + DISK_SECTOR_SIZE * i);
+				newpage->frame = NULL;
+				list_push_back(&page->anon.slot->page_list, &newpage->out_elem);
+				newpage->anon.slot = page->anon.slot;
+				if (page->writable == 1)
+				{
+					page->write_protected = true;
+					newpage->write_protected = true;
+				}
+				else
+					newpage->write_protected = false;
 			}
 			else
-				memcpy(newpage->frame->kva, page->frame->kva, PGSIZE);
+			{
+				newpage->frame = page->frame;
+				if (page->writable == 1)
+				{
+					pml4_clear_page(page->pml4, page->va);
+					pml4_set_page(page->pml4, page->va, page->frame->kva, 0);
+					page->write_protected = true;
+					newpage->write_protected = true;
+				}
+				else
+				{
+					newpage->write_protected = false;
+				}
+				list_push_back(&page->frame->page_list, &newpage->out_elem);
+				pml4_set_page(newpage->pml4, newpage->va, newpage->frame->kva, 0);
+			}
 			break;
 		case VM_FILE:
 			newpage = malloc(sizeof(struct page));
