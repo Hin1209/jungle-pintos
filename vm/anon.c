@@ -6,7 +6,6 @@
 
 /* DO NOT MODIFY BELOW LINE */
 static struct list swap_slot_list;
-static struct lock swap_lock;
 static char *zero_set[PGSIZE];
 static bool anon_swap_in(struct page *page, void *kva);
 static bool anon_swap_out(struct page *page);
@@ -43,10 +42,15 @@ bool anon_initializer(struct page *page, enum vm_type type, void *kva)
 	/* Set up the handler */
 	page->operations = &anon_ops;
 
+	bool is_frame_lock = lock_held_by_current_thread(&frame_lock);
+	if (!is_frame_lock)
+		lock_acquire(&frame_lock);
 	struct anon_page *anon_page = &page->anon;
 	page->pml4 = thread_current()->pml4;
 	anon_page->slot = NULL;
 	list_push_back(&page->frame->page_list, &page->out_elem);
+	if (!is_frame_lock)
+		lock_release(&frame_lock);
 	return true;
 }
 
@@ -54,13 +58,18 @@ bool anon_initializer(struct page *page, enum vm_type type, void *kva)
 static bool
 anon_swap_in(struct page *page, void *kva)
 {
+	memset(kva, 0, PGSIZE);
 	struct anon_page *anon_page = &page->anon;
 	struct list *page_list = &anon_page->slot->page_list;
 	struct swap_slot *slot = anon_page->slot;
 	int read = 0;
+	bool is_frame_lock = lock_held_by_current_thread(&frame_lock);
+	if (!is_frame_lock)
+		lock_acquire(&frame_lock);
 	while (!list_empty(page_list))
 	{
 		struct page *in_page = list_entry(list_pop_front(page_list), struct page, out_elem);
+		in_page->frame = page->frame;
 		if (in_page->write_protected)
 			pml4_set_page(in_page->pml4, in_page->va, page->frame->kva, 0);
 		else
@@ -73,11 +82,17 @@ anon_swap_in(struct page *page, void *kva)
 				disk_write(swap_disk, in_page->anon.slot->start_sector + i, zero_set + DISK_SECTOR_SIZE * i);
 			}
 		}
-		in_page->frame = page->frame;
 		page->frame->cnt_page += 1;
 		list_push_back(&page->frame->page_list, &in_page->out_elem);
 	}
+	if (!is_frame_lock)
+		lock_release(&frame_lock);
+	bool is_swap_lock = lock_held_by_current_thread(&swap_lock);
+	if (!is_swap_lock)
+		lock_acquire(&swap_lock);
 	list_push_back(&swap_slot_list, &slot->slot_elem);
+	if (!is_swap_lock)
+		lock_release(&swap_lock);
 	return true;
 }
 
@@ -86,8 +101,18 @@ static bool
 anon_swap_out(struct page *page)
 {
 	struct anon_page *anon_page = &page->anon;
+	bool is_swap_lock = lock_held_by_current_thread(&swap_lock);
+	if (!is_swap_lock)
+		lock_acquire(&swap_lock);
 	anon_page->slot = list_entry(list_pop_front(&swap_slot_list), struct swap_slot, slot_elem);
+	if (!is_swap_lock)
+		lock_release(&swap_lock);
+	bool is_frame_lock = lock_held_by_current_thread(&frame_lock);
+	if (!is_frame_lock)
+		lock_acquire(&frame_lock);
 	struct frame *frame = page->frame;
+	if (frame == NULL)
+		return true;
 	int dirty = 0;
 	while (!list_empty(&frame->page_list))
 	{
@@ -97,11 +122,13 @@ anon_swap_out(struct page *page)
 		out_page->anon.slot = anon_page->slot;
 		for (int i = 0; i < SLOT_SIZE; i++)
 		{
-			disk_write(swap_disk, out_page->anon.slot->start_sector + i, out_page->va + DISK_SECTOR_SIZE * i);
+			disk_write(swap_disk, out_page->anon.slot->start_sector + i, out_page->frame->kva + DISK_SECTOR_SIZE * i);
 		}
 		pml4_clear_page(out_page->pml4, out_page->va);
 		out_page->frame = NULL;
 	}
+	if (!is_frame_lock)
+		lock_release(&frame_lock);
 	return true;
 }
 
@@ -110,6 +137,9 @@ static void
 anon_destroy(struct page *page)
 {
 	struct anon_page *anon_page = &page->anon;
+	bool is_frame_lock = lock_held_by_current_thread(&frame_lock);
+	if (!is_frame_lock)
+		lock_acquire(&frame_lock);
 	list_remove(&page->out_elem);
 	if (page->frame != NULL)
 	{
@@ -122,4 +152,16 @@ anon_destroy(struct page *page)
 		else
 			pml4_clear_page(page->pml4, page->va);
 	}
+	else
+	{
+		bool is_swap_lock = lock_held_by_current_thread(&swap_lock);
+		if (!is_swap_lock)
+			lock_acquire(&swap_lock);
+		if (list_empty(&page->anon.slot->page_list))
+			list_push_back(&swap_slot_list, &page->anon.slot->slot_elem);
+		if (!is_swap_lock)
+			lock_release(&swap_lock);
+	}
+	if (!is_frame_lock)
+		lock_release(&frame_lock);
 }
