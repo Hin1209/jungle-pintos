@@ -30,6 +30,9 @@ bool file_backed_initializer(struct page *page, enum vm_type type, void *kva)
 	page->operations = &file_ops;
 	struct file_load *aux = page->uninit.aux;
 
+	bool is_frame_lock = lock_held_by_current_thread(&frame_lock);
+	if (!is_frame_lock)
+		lock_acquire(&frame_lock);
 	struct file_page *file_page = &page->file;
 	file_page->file = aux->file;
 	file_page->ofs = aux->ofs;
@@ -38,6 +41,8 @@ bool file_backed_initializer(struct page *page, enum vm_type type, void *kva)
 	file_page->file_length = aux->file_length;
 	page->pml4 = thread_current()->pml4;
 	list_push_back(&page->frame->page_list, &page->out_elem);
+	if (!is_frame_lock)
+		lock_release(&frame_lock);
 	return true;
 }
 
@@ -45,15 +50,16 @@ bool file_backed_initializer(struct page *page, enum vm_type type, void *kva)
 static bool
 file_backed_swap_in(struct page *page, void *kva)
 {
-	struct file_page *file_page UNUSED = &page->file;
-	struct list *file_list = file_page->file_list;
-	struct frame *frame = page->frame;
 	bool is_lock_held = lock_held_by_current_thread(&filesys_lock);
 	if (!is_lock_held)
 		lock_acquire(&filesys_lock);
+	bool is_frame_lock = lock_held_by_current_thread(&frame_lock);
+	if (!is_frame_lock)
+		lock_acquire(&frame_lock);
+	struct file_page *file_page UNUSED = &page->file;
+	struct list *file_list = file_page->file_list;
+	struct frame *frame = page->frame;
 	file_read_at(file_page->file, page->frame->kva, file_page->read_bytes, file_page->ofs);
-	if (!is_lock_held)
-		lock_release(&filesys_lock);
 	while (!list_empty(file_list))
 	{
 		struct page *in_page = list_entry(list_pop_front(file_list), struct page, out_elem);
@@ -61,6 +67,10 @@ file_backed_swap_in(struct page *page, void *kva)
 		pml4_set_page(in_page->pml4, in_page->va, frame->kva, in_page->writable);
 	}
 	free(file_list);
+	if (!is_frame_lock)
+		lock_release(&frame_lock);
+	if (!is_lock_held)
+		lock_release(&filesys_lock);
 	return true;
 }
 
@@ -68,14 +78,17 @@ file_backed_swap_in(struct page *page, void *kva)
 static bool
 file_backed_swap_out(struct page *page)
 {
+	bool is_lock_held = lock_held_by_current_thread(&filesys_lock);
+	if (!is_lock_held)
+		lock_acquire(&filesys_lock);
+	bool is_frame_lock = lock_held_by_current_thread(&frame_lock);
+	if (!is_frame_lock)
+		lock_acquire(&frame_lock);
 	struct file_page *file_page UNUSED = &page->file;
 	struct list *file_list = malloc(sizeof(struct list));
 	list_init(file_list);
 	file_page->file_list = file_list;
 	struct frame *frame = page->frame;
-	bool is_lock_held = lock_held_by_current_thread(&filesys_lock);
-	if (!is_lock_held)
-		lock_acquire(&filesys_lock);
 	while (!list_empty(&frame->page_list))
 	{
 		struct page *out_page = list_entry(list_pop_front(&frame->page_list), struct page, out_elem);
@@ -85,6 +98,8 @@ file_backed_swap_out(struct page *page)
 		pml4_clear_page(out_page->pml4, out_page->va);
 		out_page->frame = NULL;
 	}
+	if (!is_frame_lock)
+		lock_release(&frame_lock);
 	if (!is_lock_held)
 		lock_release(&filesys_lock);
 	return true;
@@ -96,27 +111,24 @@ file_backed_destroy(struct page *page)
 {
 	struct file_page *file_page UNUSED = &page->file;
 	bool is_lock_held = lock_held_by_current_thread(&filesys_lock);
+	if (!is_lock_held)
+		lock_acquire(&filesys_lock);
+	bool is_frame_lock = lock_held_by_current_thread(&frame_lock);
+	if (!is_frame_lock)
+		lock_acquire(&frame_lock);
 	list_remove(&page->out_elem);
 	if (page->frame == NULL)
 	{
-		if (!is_lock_held)
-			lock_acquire(&filesys_lock);
 		file_close(page->file.file);
-		if (!is_lock_held)
-			lock_release(&filesys_lock);
 	}
 	else
 	{
 		page->frame->cnt_page -= 1;
-		if (!is_lock_held)
-			lock_acquire(&filesys_lock);
 		if (pml4_is_dirty(thread_current()->pml4, page->va))
 		{
 			file_write_at(page->file.file, page->frame->kva, page->file.read_bytes, page->file.ofs);
 		}
 		file_close(page->file.file);
-		if (!is_lock_held)
-			lock_release(&filesys_lock);
 		if (page->frame->cnt_page > 0)
 			pml4_clear_page(thread_current()->pml4, page->va);
 		else
@@ -125,6 +137,10 @@ file_backed_destroy(struct page *page)
 			free(page->frame);
 		}
 	}
+	if (!is_frame_lock)
+		lock_release(&frame_lock);
+	if (!is_lock_held)
+		lock_release(&filesys_lock);
 }
 
 static bool lazy_load(struct page *page, void *aux_)
@@ -154,6 +170,9 @@ do_mmap(void *addr, size_t length, int writable,
 {
 	int cnt_page = length % PGSIZE ? length / PGSIZE + 1 : length / PGSIZE;
 	size_t length_ = length;
+	bool is_lock_held = lock_held_by_current_thread(&filesys_lock);
+	if (!is_lock_held)
+		lock_acquire(&filesys_lock);
 	off_t ofs = file_length(file);
 	if (ofs < offset)
 		return NULL;
@@ -161,12 +180,11 @@ do_mmap(void *addr, size_t length, int writable,
 	{
 		if (spt_find_page(&thread_current()->spt, addr + i * PGSIZE) != NULL)
 		{
+			if (!is_lock_held)
+				lock_release(&filesys_lock);
 			return NULL;
 		}
 	}
-	bool is_lock_held = lock_held_by_current_thread(&filesys_lock);
-	if (!is_lock_held)
-		lock_acquire(&filesys_lock);
 	for (int i = 0; i < cnt_page; i++)
 	{
 		struct file *file_ = file_reopen(file);
@@ -206,6 +224,9 @@ void do_munmap(void *addr)
 	bool is_lock_held = lock_held_by_current_thread(&filesys_lock);
 	if (!is_lock_held)
 		lock_acquire(&filesys_lock);
+	bool is_frame_lock = lock_held_by_current_thread(&frame_lock);
+	if (!is_frame_lock)
+		lock_acquire(&frame_lock);
 	for (int i = 0; i < cnt_page; i++)
 	{
 		page = spt_find_page(&thread_current()->spt, addr + i * PGSIZE);
@@ -224,6 +245,8 @@ void do_munmap(void *addr)
 		list_remove(&page->out_elem);
 		pml4_clear_page(thread_current()->pml4, page->va);
 	}
+	if (!is_frame_lock)
+		lock_release(&frame_lock);
 	if (!is_lock_held)
 		lock_release(&filesys_lock);
 }
