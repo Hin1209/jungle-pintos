@@ -395,6 +395,8 @@ void donate_priority(void)
 		if (curr->wait_on_lock == NULL) // 더이상 중첩되지 않았으면 종료
 			return;
 		holder = curr->wait_on_lock->holder;
+		if (holder == NULL)
+			return;
 		if (holder->priority < priority)
 			holder->priority = priority;
 		curr = holder;

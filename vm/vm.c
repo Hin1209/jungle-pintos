@@ -225,6 +225,7 @@ bool vm_claim_page(void *va UNUSED)
 	struct page *page = spt_find_page(&curr->spt, va);
 	if (page == NULL)
 	{
+		PANIC("TODO");
 	}
 
 	return vm_do_claim_page(page);
@@ -285,6 +286,9 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 	struct hash_iterator i;
 	struct page *newpage;
 	void *aux;
+	bool is_lock_held = lock_held_by_current_thread(&filesys_lock);
+	if (!is_lock_held)
+		lock_acquire(&filesys_lock);
 	hash_first(&i, &src->spt_hash);
 	while (hash_next(&i))
 	{
@@ -310,7 +314,7 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 				spt_insert_page(&thread_current()->spt,newpage);
 				newpage->frame = page->frame;
 				newpage->frame->cnt_page += 1;
-				newpage->file.file = file_reopen(page->file.file);
+				newpage->file.file = file_duplicate(page->file.file);
 				newpage->file.file_length = page->file.file_length;
 				newpage->file.ofs = page->file.ofs;
 				newpage->file.read_bytes = page->file.read_bytes;
@@ -319,6 +323,8 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 				break;
 		}
 	}
+	if (!is_lock_held)
+		lock_release(&filesys_lock);
 	return true;  
 }
 

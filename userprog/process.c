@@ -358,8 +358,6 @@ int process_exec(void *f_name)
 	_if.ds = _if.es = _if.ss = SEL_UDSEG;
 	_if.cs = SEL_UCSEG;
 	_if.eflags = FLAG_IF | FLAG_MBS;
-	if (!lock_held_by_current_thread(&filesys_lock))
-		lock_acquire(&filesys_lock);
 
 	/* We first kill the current context */
 	process_cleanup();
@@ -376,8 +374,11 @@ int process_exec(void *f_name)
 		count++;
 	}
 	/* And then load the binary */
+	bool is_lock_held = lock_held_by_current_thread(&filesys_lock);
+	if (!is_lock_held)
+		lock_acquire(&filesys_lock);
 	success = load(file_name, &_if);
-	if (lock_held_by_current_thread(&filesys_lock))
+	if (!is_lock_held)
 		lock_release(&filesys_lock);
 
 	/* If load failed, quit. */
@@ -429,6 +430,9 @@ int process_wait(tid_t child_tid UNUSED)
 void process_exit(void)
 {
 	struct thread *curr = thread_current(); // 자식
+	bool is_lock_held = lock_held_by_current_thread(&filesys_lock);
+	if (!is_lock_held)
+		lock_acquire(&filesys_lock);
 
 	for (int i = 2; i < FDT_COUNT; i++)
 	{
@@ -437,7 +441,7 @@ void process_exit(void)
 		{
 			/* 해당 파일 디스크립터를 닫음 */
 			/* 파일 테이블에서 해당 파일 디스크립터를 제거 */
-			close(i);
+			file_close(curr->fdt[i]);
 		}
 	}
 	sema_up(&curr->wait_sema);
@@ -445,6 +449,8 @@ void process_exit(void)
 	file_close(curr->running);
 	process_cleanup();
 	hash_destroy(&curr->spt.spt_hash, NULL);
+	if (!is_lock_held)
+		lock_release(&filesys_lock);
 	sema_down(&curr->exit_sema);
 }
 
@@ -830,6 +836,9 @@ lazy_load_segment(struct page *page, void *aux_)
 	uint32_t read_bytes = aux->read_bytes;
 	uint32_t zero_bytes = aux->zero_bytes;
 	free(aux);
+	bool is_lock_held = lock_held_by_current_thread(&filesys_lock);
+	if (!is_lock_held)
+		lock_acquire(&filesys_lock);
 	file_seek(file, ofs);
 
 	if (file_read(file, page->frame->kva, read_bytes) != (int)read_bytes)
@@ -837,6 +846,8 @@ lazy_load_segment(struct page *page, void *aux_)
 		// error handle
 		return false;
 	}
+	if (!is_lock_held)
+		lock_release(&filesys_lock);
 	memset(page->frame->kva + read_bytes, 0, zero_bytes);
 	return true;
 }
