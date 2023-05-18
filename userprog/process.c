@@ -440,11 +440,11 @@ void process_exit(void)
 			close(i);
 		}
 	}
+	sema_up(&curr->wait_sema);
 	palloc_free_multiple(curr->fdt, 3);
 	file_close(curr->running);
 	process_cleanup();
 	hash_destroy(&curr->spt.spt_hash, NULL);
-	sema_up(&curr->wait_sema);
 	sema_down(&curr->exit_sema);
 }
 
@@ -830,7 +830,6 @@ lazy_load_segment(struct page *page, void *aux_)
 	uint32_t read_bytes = aux->read_bytes;
 	uint32_t zero_bytes = aux->zero_bytes;
 	free(aux);
-
 	file_seek(file, ofs);
 
 	if (file_read(file, page->frame->kva, read_bytes) != (int)read_bytes)

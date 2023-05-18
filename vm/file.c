@@ -65,13 +65,15 @@ file_backed_destroy(struct page *page)
 	struct file_page *file_page UNUSED = &page->file;
 	//화살표만 지움(엔트리 연결 해제)
 	page->frame->cnt_page -= 1;
+	if (!lock_held_by_current_thread(&filesys_lock))
+		lock_acquire(&filesys_lock);
 	if (pml4_is_dirty(thread_current()->pml4, page->va))
 	{
-		lock_acquire(&filesys_lock);
 		file_write_at(page->file.file, page->va, page->file.read_bytes, page->file.ofs);
-		lock_release(&filesys_lock);
 	}
 	file_close(page->file.file);
+	if (lock_held_by_current_thread(&filesys_lock))
+		lock_release(&filesys_lock);
 	if (page->frame->cnt_page > 0)
 		pml4_clear_page(thread_current()->pml4, page->va);
 }
@@ -84,7 +86,6 @@ static bool lazy_load(struct page *page, void *aux_)
 	uint32_t read_bytes = aux->read_bytes;
 	uint32_t zero_bytes = aux->zero_bytes;
 	free(aux);
-
 	file_seek(file, ofs);
 
 	read_bytes = file_read(file, page->frame->kva, read_bytes);
@@ -143,18 +144,20 @@ void do_munmap(void *addr)
 		return;
 	length = page->file.file_length;
 	cnt_page = length % PGSIZE ? length / PGSIZE + 1 : length / PGSIZE;
+	if (!lock_held_by_current_thread(&filesys_lock))
+		lock_acquire(&filesys_lock);
 	for (int i = 0; i < cnt_page; i++)
 	{
 		page = spt_find_page(&thread_current()->spt, addr + i * PGSIZE);
 		if (pml4_is_dirty(thread_current()->pml4, page->va))
 		{
-			lock_acquire(&filesys_lock);
 			file_write_at(page->file.file, page->va, page->file.read_bytes, page->file.ofs);
-			lock_release(&filesys_lock);
 		}
 		page->frame->cnt_page -= 1;
 		file_close(page->file.file);
 		hash_delete(&thread_current()->spt.spt_hash, &page->page_elem);
 		pml4_clear_page(thread_current()->pml4, page->va);
 	}
+	if (lock_held_by_current_thread(&filesys_lock))
+		lock_release(&filesys_lock);
 }
