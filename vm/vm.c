@@ -311,7 +311,6 @@ vm_do_claim_page(struct page *page)
 	/* Set links */
 	frame->page = page;
 	page->frame = frame;
-	page->write_protected = false;
 
 	switch (VM_TYPE(page->operations->type))
 	{
