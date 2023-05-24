@@ -157,11 +157,15 @@ void fat_boot_create(void)
 		.fat_sectors = fat_sectors,
 		.root_dir_cluster = ROOT_DIR_CLUSTER,
 	};
+	printf("total sector: %u\n", disk_size(filesys_disk));
+	printf("fat sector : %u\n", fat_sectors);
 }
 
 void fat_fs_init(void)
 {
 	/* TODO: Your code goes here. */
+	fat_fs->fat_length = 1;
+	fat_fs->data_start = 1;
 }
 
 /*----------------------------------------------------------------------------*/
