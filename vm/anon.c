@@ -20,8 +20,15 @@ static const struct page_operations anon_ops = {
 /* Initialize the data for anonymous pages */
 void vm_anon_init(void)
 {
-	/* TODO: Set up the swap_disk. */
-	swap_disk = NULL;
+	swap_disk = disk_get(1, 1);
+	list_init(&swap_slot_list);
+	for (int i = 0; i < disk_size(swap_disk); i += SLOT_SIZE)
+	{
+		struct swap_slot *slot = malloc(sizeof(struct swap_slot));
+		list_init(&slot->page_list);
+		slot->start_sector = i;
+		list_push_back(&swap_slot_list, &slot->slot_elem);
+	}
 }
 
 /* Initialize the file mapping */
