@@ -1,10 +1,14 @@
 /* anon.c: Implementation of page for non-disk image (a.k.a. anonymous page). */
 
 #include "vm/vm.h"
+#include "threads/vaddr.h"
 #include "devices/disk.h"
 
 /* DO NOT MODIFY BELOW LINE */
 static struct disk *swap_disk;
+static struct list swap_slot_list;
+static struct lock swap_lock;
+static char *zero_set[PGSIZE];
 static bool anon_swap_in(struct page *page, void *kva);
 static bool anon_swap_out(struct page *page);
 static void anon_destroy(struct page *page);
@@ -29,6 +33,7 @@ void vm_anon_init(void)
 		slot->start_sector = i;
 		list_push_back(&swap_slot_list, &slot->slot_elem);
 	}
+	memset(zero_set, 0, PGSIZE);
 }
 
 /* Initialize the file mapping */
