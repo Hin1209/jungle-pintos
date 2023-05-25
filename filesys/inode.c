@@ -6,6 +6,7 @@
 #include "filesys/filesys.h"
 #include "filesys/free-map.h"
 #include "threads/malloc.h"
+#include "filesys/fat.h"
 
 /* Identifies an inode. */
 #define INODE_MAGIC 0x494e4f44
@@ -48,7 +49,16 @@ byte_to_sector(const struct inode *inode, off_t pos)
 {
 	ASSERT(inode != NULL);
 	if (pos < inode->data.length)
-		return inode->data.start + pos / DISK_SECTOR_SIZE;
+	{
+		cluster_t clst = sector_to_cluster(inode->data.start);
+		int iter = pos / (DISK_SECTOR_SIZE * SECTORS_PER_CLUSTER);
+		int left = pos / DISK_SECTOR_SIZE - iter * SECTORS_PER_CLUSTER;
+		for (int i = 0; i < iter; i++)
+			clst = fat_get(clst);
+		return cluster_to_sector(clst) + left;
+	}
+	else if (inode->sector == ROOT_DIR_SECTOR)
+		return 1;
 	else
 		return -1;
 }
@@ -83,21 +93,33 @@ bool inode_create(disk_sector_t sector, off_t length)
 	if (disk_inode != NULL)
 	{
 		size_t sectors = bytes_to_sectors(length);
+		sectors = sector_to_cluster(sectors);
 		disk_inode->length = length;
 		disk_inode->magic = INODE_MAGIC;
-		if (free_map_allocate(sectors, &disk_inode->start))
+		disk_inode->start = cluster_to_sector(fat_create_chain(0));
+		cluster_t clst = sector_to_cluster(disk_inode->start);
+		for (int i = 0; i < sectors - 1; i++)
+			clst = fat_create_chain(clst);
+		clst = sector_to_cluster(disk_inode->start);
+		disk_sector_t tmp;
+		disk_write(filesys_disk, sector, disk_inode);
+		if (sectors > 0)
 		{
-			disk_write(filesys_disk, sector, disk_inode);
-			if (sectors > 0)
-			{
-				static char zeros[DISK_SECTOR_SIZE];
-				size_t i;
+			static char zeros[DISK_SECTOR_SIZE];
 
-				for (i = 0; i < sectors; i++)
-					disk_write(filesys_disk, disk_inode->start + i, zeros);
+			while (true)
+			{
+				if (clst == EOChain)
+					break;
+				tmp = cluster_to_sector(clst);
+				for (int i = 0; i < SECTORS_PER_CLUSTER; i++)
+				{
+					disk_write(filesys_disk, tmp + i, zeros);
+				}
+				clst = fat_get(clst);
 			}
-			success = true;
 		}
+		success = true;
 		free(disk_inode);
 	}
 	return success;
@@ -203,6 +225,7 @@ off_t inode_read_at(struct inode *inode, void *buffer_, off_t size, off_t offset
 	{
 		/* Disk sector to read, starting byte offset within sector. */
 		disk_sector_t sector_idx = byte_to_sector(inode, offset);
+		printf("sector idx : %u\n", sector_idx);
 		int sector_ofs = offset % DISK_SECTOR_SIZE;
 
 		/* Bytes left in inode, bytes left in sector, lesser of the two. */

@@ -148,6 +148,8 @@ bool dir_add(struct dir *dir, const char *name, disk_sector_t inode_sector)
 	if (*name == '\0' || strlen(name) > NAME_MAX)
 		return false;
 
+	printf("inode sector : %u\n", inode_sector);
+	disk_read(filesys_disk, inode_sector, dir->inode);
 	/* Check that NAME is not in use. */
 	if (lookup(dir, name, NULL, NULL))
 		goto done;

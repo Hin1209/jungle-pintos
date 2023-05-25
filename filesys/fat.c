@@ -163,7 +163,7 @@ void fat_fs_init(void)
 {
 	/* TODO: Your code goes here. */
 	fat_fs->fat_length = fat_fs->bs.total_sectors / SECTORS_PER_CLUSTER;
-	fat_fs->data_start = fat_fs->bs.fat_start + fat_fs->fat_length;
+	fat_fs->data_start = fat_fs->bs.fat_start + fat_fs->fat_length * sizeof(cluster_t) / DISK_SECTOR_SIZE;
 	lock_init(&fat_fs->write_lock);
 }
 
@@ -179,13 +179,13 @@ fat_create_chain(cluster_t clst)
 {
 	/* TODO: Your code goes here. */
 	lock_acquire(&fat_fs->write_lock);
-	for (int i = 0; i < fat_fs->fat_length; i++)
+	for (int i = 2; i < fat_fs->fat_length; i++)
 	{
 		if (fat_fs->fat[i] == 0)
 		{
 			if (clst != 0)
 				fat_fs->fat[clst] = i;
-			fat_fs->fat[i] = (unsigned int)-1;
+			fat_fs->fat[i] = EOChain;
 			lock_release(&fat_fs->write_lock);
 			return i;
 		}
@@ -203,7 +203,7 @@ void fat_remove_chain(cluster_t clst, cluster_t pclst)
 	cluster_t next_clst = clst;
 	while (true)
 	{
-		if (fat_fs->fat[next_clst] == (unsigned int)-1)
+		if (fat_fs->fat[next_clst] == EOChain)
 		{
 			fat_fs->fat[next_clst] = 0;
 			break;
@@ -213,7 +213,7 @@ void fat_remove_chain(cluster_t clst, cluster_t pclst)
 		clst = next_clst;
 	}
 	if (pclst)
-		fat_fs->fat[pclst] = (unsigned int)-1;
+		fat_fs->fat[pclst] = EOChain;
 }
 
 /* Update a value in the FAT table. */
@@ -235,6 +235,13 @@ fat_get(cluster_t clst)
 disk_sector_t
 cluster_to_sector(cluster_t clst)
 {
-	return clst * SECTORS_PER_CLUSTER;
+	return fat_fs->data_start + clst * SECTORS_PER_CLUSTER;
 	/* TODO: Your code goes here. */
+}
+
+cluster_t
+sector_to_cluster(disk_sector_t sec_no)
+{
+	printf("sec no : %u\n", sec_no);
+	return (sec_no - fat_fs->data_start) / SECTORS_PER_CLUSTER;
 }
