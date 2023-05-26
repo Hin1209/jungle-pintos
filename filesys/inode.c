@@ -48,7 +48,7 @@ static disk_sector_t
 byte_to_sector(const struct inode *inode, off_t pos)
 {
 	ASSERT(inode != NULL);
-	if (pos < inode->data.length)
+	if (pos <= inode->data.length)
 	{
 		cluster_t clst = sector_to_cluster(inode->data.start);
 		int iter = pos / (DISK_SECTOR_SIZE * SECTORS_PER_CLUSTER);
@@ -57,10 +57,8 @@ byte_to_sector(const struct inode *inode, off_t pos)
 			clst = fat_get(clst);
 		return cluster_to_sector(clst) + left;
 	}
-	else if (inode->sector == ROOT_DIR_SECTOR)
-		return 1;
 	else
-		return -1;
+		return EOChain;
 }
 
 /* List of open inodes, so that opening a single inode twice
@@ -88,17 +86,17 @@ bool inode_create(disk_sector_t sector, off_t length)
 	/* If this assertion fails, the inode structure is not exactly
 	 * one sector in size, and you should fix that. */
 	ASSERT(sizeof *disk_inode == DISK_SECTOR_SIZE);
-
 	disk_inode = calloc(1, sizeof *disk_inode);
 	if (disk_inode != NULL)
 	{
 		size_t sectors = bytes_to_sectors(length);
-		sectors = sector_to_cluster(sectors);
+		size_t cluster_cnt = sectors / SECTORS_PER_CLUSTER;
+		// sectors = sector_to_cluster(sectors);
 		disk_inode->length = length;
 		disk_inode->magic = INODE_MAGIC;
 		disk_inode->start = cluster_to_sector(fat_create_chain(0));
 		cluster_t clst = sector_to_cluster(disk_inode->start);
-		for (int i = 0; i < sectors - 1; i++)
+		for (int i = 0; i < cluster_cnt; i++)
 			clst = fat_create_chain(clst);
 		clst = sector_to_cluster(disk_inode->start);
 		disk_sector_t tmp;
@@ -158,6 +156,8 @@ inode_open(disk_sector_t sector)
 	inode->deny_write_cnt = 0;
 	inode->removed = false;
 	disk_read(filesys_disk, inode->sector, &inode->data);
+	if (sector == ROOT_DIR_SECTOR)
+		inode->data.start = cluster_to_sector(ROOT_DIR_CLUSTER);
 	return inode;
 }
 
@@ -225,7 +225,10 @@ off_t inode_read_at(struct inode *inode, void *buffer_, off_t size, off_t offset
 	{
 		/* Disk sector to read, starting byte offset within sector. */
 		disk_sector_t sector_idx = byte_to_sector(inode, offset);
-		printf("sector idx : %u\n", sector_idx);
+		if (sector_idx == EOChain)
+		{
+			return 0;
+		}
 		int sector_ofs = offset % DISK_SECTOR_SIZE;
 
 		/* Bytes left in inode, bytes left in sector, lesser of the two. */
@@ -282,6 +285,25 @@ off_t inode_write_at(struct inode *inode, const void *buffer_, off_t size,
 	if (inode->deny_write_cnt)
 		return 0;
 
+	size_t left_size = DISK_SECTOR_SIZE * SECTORS_PER_CLUSTER - inode->data.length % (DISK_SECTOR_SIZE * SECTORS_PER_CLUSTER);
+	size_t need_size = 0;
+	if (inode->data.length < offset + size)
+	{
+		need_size = offset + size - inode->data.length;
+		inode->data.length += need_size;
+	}
+	if (need_size > left_size)
+	{
+		need_size -= left_size;
+		cluster_t last_clst = sector_to_cluster(byte_to_sector(inode, inode->data.length - 1));
+		if (inode->data.length == 0)
+			last_clst = sector_to_cluster(inode->data.start);
+		for (int i = 0; i < need_size / (DISK_SECTOR_SIZE * SECTORS_PER_CLUSTER) + 1; i++)
+		{
+			last_clst = fat_create_chain(last_clst);
+		}
+		disk_write(filesys_disk, inode->sector, inode);
+	}
 	while (size > 0)
 	{
 		/* Sector to write, starting byte offset within sector. */
@@ -289,14 +311,10 @@ off_t inode_write_at(struct inode *inode, const void *buffer_, off_t size,
 		int sector_ofs = offset % DISK_SECTOR_SIZE;
 
 		/* Bytes left in inode, bytes left in sector, lesser of the two. */
-		off_t inode_left = inode_length(inode) - offset;
 		int sector_left = DISK_SECTOR_SIZE - sector_ofs;
-		int min_left = inode_left < sector_left ? inode_left : sector_left;
 
 		/* Number of bytes to actually write into this sector. */
-		int chunk_size = size < min_left ? size : min_left;
-		if (chunk_size <= 0)
-			break;
+		int chunk_size = sector_left < size ? sector_left : size;
 
 		if (sector_ofs == 0 && chunk_size == DISK_SECTOR_SIZE)
 		{

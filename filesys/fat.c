@@ -1,6 +1,7 @@
 #include "filesys/fat.h"
 #include "devices/disk.h"
 #include "filesys/filesys.h"
+#include "filesys/directory.h"
 #include "threads/malloc.h"
 #include "threads/synch.h"
 #include <stdio.h>
@@ -46,7 +47,6 @@ void fat_init(void)
 	disk_read(filesys_disk, FAT_BOOT_SECTOR, bounce);
 	memcpy(&fat_fs->bs, bounce, sizeof(fat_fs->bs));
 	free(bounce);
-
 	// Extract FAT info
 	if (fat_fs->bs.magic != FAT_MAGIC)
 		fat_boot_create();
@@ -142,6 +142,8 @@ void fat_create(void)
 	if (buf == NULL)
 		PANIC("FAT create failed due to OOM");
 	disk_write(filesys_disk, cluster_to_sector(ROOT_DIR_CLUSTER), buf);
+	struct dir *root_dir = dir_open_root();
+	dir_add(root_dir, ".", fat_fs->data_start);
 	free(buf);
 }
 
@@ -163,7 +165,8 @@ void fat_fs_init(void)
 {
 	/* TODO: Your code goes here. */
 	fat_fs->fat_length = fat_fs->bs.total_sectors / SECTORS_PER_CLUSTER;
-	fat_fs->data_start = fat_fs->bs.fat_start + fat_fs->fat_length * sizeof(cluster_t) / DISK_SECTOR_SIZE;
+	fat_fs->data_start = fat_fs->bs.fat_start + fat_fs->bs.fat_sectors;
+	printf("fat start : %d\n", fat_fs->data_start);
 	lock_init(&fat_fs->write_lock);
 }
 
@@ -242,6 +245,5 @@ cluster_to_sector(cluster_t clst)
 cluster_t
 sector_to_cluster(disk_sector_t sec_no)
 {
-	printf("sec no : %u\n", sec_no);
 	return (sec_no - fat_fs->data_start) / SECTORS_PER_CLUSTER;
 }
