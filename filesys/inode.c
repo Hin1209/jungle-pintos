@@ -55,6 +55,8 @@ byte_to_sector(const struct inode *inode, off_t pos)
 		int left = pos / DISK_SECTOR_SIZE - iter * SECTORS_PER_CLUSTER;
 		for (int i = 0; i < iter; i++)
 			clst = fat_get(clst);
+		if (clst == EOChain)
+			return EOChain;
 		return cluster_to_sector(clst) + left;
 	}
 	else
@@ -195,9 +197,8 @@ void inode_close(struct inode *inode)
 		/* Deallocate blocks if removed. */
 		if (inode->removed)
 		{
-			free_map_release(inode->sector, 1);
-			free_map_release(inode->data.start,
-							 bytes_to_sectors(inode->data.length));
+			fat_remove_chain(sector_to_cluster(inode->sector), 0);
+			fat_remove_chain(sector_to_cluster(inode->data.start), 0);
 		}
 
 		free(inode);
@@ -220,15 +221,15 @@ off_t inode_read_at(struct inode *inode, void *buffer_, off_t size, off_t offset
 	uint8_t *buffer = buffer_;
 	off_t bytes_read = 0;
 	uint8_t *bounce = NULL;
-
+	if (inode->data.length < size + offset)
+		return 0;
 	while (size > 0)
 	{
 		/* Disk sector to read, starting byte offset within sector. */
 		disk_sector_t sector_idx = byte_to_sector(inode, offset);
 		if (sector_idx == EOChain)
-		{
 			return 0;
-		}
+
 		int sector_ofs = offset % DISK_SECTOR_SIZE;
 
 		/* Bytes left in inode, bytes left in sector, lesser of the two. */

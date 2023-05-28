@@ -137,14 +137,7 @@ void fat_create(void)
 	// Set up ROOT_DIR_CLST
 	fat_put(ROOT_DIR_CLUSTER, EOChain);
 
-	// Fill up ROOT_DIR_CLUSTER region with 0
-	uint8_t *buf = calloc(1, DISK_SECTOR_SIZE);
-	if (buf == NULL)
-		PANIC("FAT create failed due to OOM");
-	disk_write(filesys_disk, cluster_to_sector(ROOT_DIR_CLUSTER), buf);
-	struct dir *root_dir = dir_open_root();
-	dir_add(root_dir, ".", fat_fs->data_start);
-	free(buf);
+	init_root_dir(dir_open_root());
 }
 
 void fat_boot_create(void)
@@ -166,7 +159,6 @@ void fat_fs_init(void)
 	/* TODO: Your code goes here. */
 	fat_fs->fat_length = fat_fs->bs.total_sectors / SECTORS_PER_CLUSTER;
 	fat_fs->data_start = fat_fs->bs.fat_start + fat_fs->bs.fat_sectors;
-	printf("fat start : %d\n", fat_fs->data_start);
 	lock_init(&fat_fs->write_lock);
 }
 
@@ -217,6 +209,8 @@ void fat_remove_chain(cluster_t clst, cluster_t pclst)
 	}
 	if (pclst)
 		fat_fs->fat[pclst] = EOChain;
+	for (int i = fat_fs->bs.fat_start; i < fat_fs->data_start; i++)
+		disk_write(filesys_disk, i, fat_fs->fat + DISK_SECTOR_SIZE * i);
 }
 
 /* Update a value in the FAT table. */

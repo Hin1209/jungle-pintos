@@ -4,6 +4,7 @@
 #include <list.h>
 #include "filesys/filesys.h"
 #include "filesys/inode.h"
+#include "filesys/fat.h"
 #include "threads/malloc.h"
 
 /* A directory. */
@@ -81,6 +82,19 @@ dir_get_inode(struct dir *dir)
 	return dir->inode;
 }
 
+bool init_root_dir(struct dir *root)
+{
+	uint8_t *buf = calloc(1, DISK_SECTOR_SIZE);
+	struct dir_entry tmp;
+	disk_read(filesys_disk, cluster_to_sector(ROOT_DIR_CLUSTER), buf);
+	memcpy(&tmp, buf, sizeof(struct dir_entry));
+	if (strcmp(tmp.name, "."))
+	{
+		dir_add(root, ".", ROOT_DIR_SECTOR);
+		dir_add(root, "..", ROOT_DIR_SECTOR);
+		dir_close(root);
+	}
+}
 /* Searches DIR for a file with the given NAME.
  * If successful, returns true, sets *EP to the directory entry
  * if EP is non-null, and sets *OFSP to the byte offset of the
