@@ -15,8 +15,9 @@
  * Must be exactly DISK_SECTOR_SIZE bytes long. */
 struct inode_disk
 {
-	disk_sector_t start;  /* First data sector. */
-	off_t length;		  /* File size in bytes. */
+	disk_sector_t start; /* First data sector. */
+	off_t length;		 /* File size in bytes. */
+	bool is_dir;
 	unsigned magic;		  /* Magic number. */
 	uint32_t unused[125]; /* Not used. */
 };
@@ -78,7 +79,7 @@ void inode_init(void)
  * disk.
  * Returns true if successful.
  * Returns false if memory or disk allocation fails. */
-bool inode_create(disk_sector_t sector, off_t length)
+bool inode_create(disk_sector_t sector, off_t length, bool is_dir)
 {
 	struct inode_disk *disk_inode = NULL;
 	bool success = false;
@@ -97,6 +98,7 @@ bool inode_create(disk_sector_t sector, off_t length)
 		disk_inode->length = length;
 		disk_inode->magic = INODE_MAGIC;
 		disk_inode->start = cluster_to_sector(fat_create_chain(0));
+		disk_inode->is_dir = is_dir;
 		cluster_t clst = sector_to_cluster(disk_inode->start);
 		for (int i = 0; i < cluster_cnt; i++)
 			clst = fat_create_chain(clst);
@@ -222,6 +224,8 @@ off_t inode_read_at(struct inode *inode, void *buffer_, off_t size, off_t offset
 	off_t bytes_read = 0;
 	uint8_t *bounce = NULL;
 	if (inode->data.length < size + offset)
+		size = inode->data.length - offset;
+	else if (inode->data.length < offset)
 		return 0;
 	while (size > 0)
 	{

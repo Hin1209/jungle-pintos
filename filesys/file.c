@@ -67,6 +67,11 @@ void file_close(struct file *file)
 	}
 }
 
+bool is_dir(struct file *file)
+{
+	return file->inode->data.is_dir;
+}
+
 /* Returns the inode encapsulated by FILE. */
 struct inode *
 file_get_inode(struct file *file)

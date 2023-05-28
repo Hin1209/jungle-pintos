@@ -215,6 +215,11 @@ int open(const char *file)
 	/* 파일을 open */
 	lock_acquire(&filesys_lock);
 	struct file *fileobj = filesys_open(file);
+	if (is_dir(fileobj))
+	{
+		thread_current()->dir = "asdf";
+		return 0;
+	}
 
 	/* 해당 파일이 존재하지 않으면 -1 리턴 */
 	if (fileobj == NULL)
