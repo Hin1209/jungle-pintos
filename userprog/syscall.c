@@ -217,7 +217,7 @@ int open(const char *file)
 	struct file *fileobj = filesys_open(file);
 	if (is_dir(fileobj))
 	{
-		thread_current()->dir = "asdf";
+		// thread_current()->dir = "asdf";
 		return 0;
 	}
 
