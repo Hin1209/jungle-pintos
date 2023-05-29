@@ -455,6 +455,10 @@ bool isdir(int fd)
 
 int inumber(int fd)
 {
+	struct file *file = process_get_file(fd);
+	if (file == NULL)
+		return -1;
+	return inode_get_inumber(file_get_inode(file));
 }
 
 int symlink(const char *target, const char *linkpath)
