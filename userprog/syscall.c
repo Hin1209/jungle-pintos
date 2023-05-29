@@ -254,10 +254,6 @@ int open(const char *file)
 	{
 		file_close(fileobj);
 	}
-	if (is_dir(fileobj) == 1)
-	{
-		// thread_current()->dir = "asdf";
-	}
 	/* 파일 디스크립터 리턴 */
 	lock_release(&filesys_lock);
 	return fd;
