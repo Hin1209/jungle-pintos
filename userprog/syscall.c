@@ -8,6 +8,7 @@
 #include "threads/flags.h"
 #include "intrinsic.h"
 #include "filesys/filesys.h"
+#include "filesys/directory.h"
 #include "filesys/file.h"
 #include "threads/synch.h"
 #include "userprog/process.h"
@@ -439,6 +440,31 @@ bool mkdir(const char *dir)
 
 bool chdir(const char *dir)
 {
+	struct dir *new_dir;
+	if (dir[0] == '/')
+		new_dir = dir_open_root();
+	else
+		new_dir = thread_current()->dir;
+	char *token, *save_ptr;
+	struct inode *inode;
+	token = strtok_r(dir, "/", &save_ptr);
+	while (true)
+	{
+		if (token == NULL)
+			break;
+		if (new_dir != NULL)
+			dir_lookup(new_dir, dir, &inode);
+		if (inode == NULL)
+			return false;
+		if (is_inode_dir(inode))
+			new_dir = dir_open(inode);
+		else
+			return false;
+		token = strtok_r(NULL, "/", &save_ptr);
+	}
+	// dir_close(thread_current()->dir);
+	thread_current()->dir = new_dir;
+	return true;
 }
 
 bool readdir(int fd, char *name)
