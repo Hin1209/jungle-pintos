@@ -447,6 +447,10 @@ bool readdir(int fd, char *name)
 
 bool isdir(int fd)
 {
+	struct file *file = process_get_file(fd);
+	if (file == NULL)
+		return false;
+	return is_dir(file);
 }
 
 int inumber(int fd)
