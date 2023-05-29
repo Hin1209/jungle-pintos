@@ -349,6 +349,11 @@ int write(int fd, const void *buffer, unsigned size)
 			lock_release(&filesys_lock);
 			return -1;
 		}
+		if (is_dir(write_file))
+		{
+			lock_release(&filesys_lock);
+			return -1;
+		}
 		bytes_write = file_write(write_file, buffer, size);
 	}
 	lock_release(&filesys_lock);

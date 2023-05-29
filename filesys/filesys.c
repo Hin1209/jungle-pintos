@@ -62,10 +62,31 @@ void filesys_done(void)
 bool filesys_create(const char *name, off_t initial_size)
 {
 	disk_sector_t inode_sector = 0;
-	struct dir *dir = thread_current()->dir;
+	struct dir *dir;
+	if (name[0] == '/')
+		dir = dir_open_root();
+	else
+		dir = thread_current()->dir;
+	char *token, *save_ptr;
+	struct inode *inode;
+	token = strtok_r(name, "/", &save_ptr);
+	while (true)
+	{
+		if (token == NULL)
+			break;
+		if (dir != NULL)
+			dir_lookup(dir, name, &inode);
+		if (inode == NULL)
+			break;
+		if (is_inode_dir(inode))
+			dir = dir_open(inode);
+		else
+			return false;
+		token = strtok_r(NULL, "/", &save_ptr);
+	}
 	inode_sector = cluster_to_sector(fat_create_chain(0));
 
-	bool success = (dir != NULL && inode_create(inode_sector, initial_size, 0) && dir_add(dir, name, inode_sector));
+	bool success = (dir != NULL && inode_create(inode_sector, initial_size, 0) && dir_add(dir, token, inode_sector));
 	// if (!success && inode_sector != 0)
 	// 	free_map_release(inode_sector, 1);
 	// dir_close(dir);
@@ -81,14 +102,30 @@ bool filesys_create(const char *name, off_t initial_size)
 struct file *
 filesys_open(const char *name)
 {
-	struct dir *dir = dir_open_root();
+	struct dir *dir;
+	if (name[0] == '/')
+		dir = dir_open_root();
+	else
+		dir = thread_current()->dir;
 	struct inode *inode = NULL;
+	char *save_ptr;
+	char *token = strtok_r(name, "/", &save_ptr);
+	while (true)
+	{
+		if (token == NULL)
+			break;
+		if (dir != NULL)
+			dir_lookup(dir, name, &inode);
+		if (inode == NULL)
+			return NULL;
+		if (is_inode_dir(inode))
+			dir = dir_open(inode);
+		else
+			return file_open(inode);
+		token = strtok_r(NULL, "/", &save_ptr);
+	}
 
-	if (dir != NULL)
-		dir_lookup(dir, name, &inode);
-	dir_close(dir);
-
-	return file_open(inode);
+	return NULL;
 }
 
 /* Deletes the file named NAME.
