@@ -13,6 +13,7 @@
 #include "intrinsic.h"
 #ifdef USERPROG
 #include "userprog/process.h"
+#include "filesys/directory.h"
 #endif
 
 /* Random value for struct thread's `magic' member.
@@ -229,7 +230,8 @@ tid_t thread_create(const char *name, int priority,
 	t->tf.ss = SEL_KDSEG;
 	t->tf.cs = SEL_KCSEG;
 	t->tf.eflags = FLAG_IF;
-
+	if (strcmp(name, "idle"))
+		t->dir = dir_open(dir_get_inode(thread_current()->dir));
 #ifdef VM
 	supplemental_page_table_init(&t->spt);
 #endif

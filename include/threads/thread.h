@@ -120,7 +120,7 @@ struct thread
 	// 파일 디스크립터 관련
 	struct file **fdt;
 	int next_fd;
-	char dir[14];
+	struct dir *dir;
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */

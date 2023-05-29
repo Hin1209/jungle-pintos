@@ -33,6 +33,12 @@ unsigned tell(int fd);
 void close(int fd);
 void *mmap(void *addr, size_t length, int writable, int fd, off_t offset);
 void munmap(void *addr);
+bool chdir(const char *dir);
+bool mkdir(const char *dir);
+bool readdir(int fd, char *name);
+bool isdir(int fd);
+int inumber(int fd);
+int symlink(const char *target, const char *linkpath);
 
 /* System call.
  *
@@ -121,6 +127,24 @@ void syscall_handler(struct intr_frame *f UNUSED)
 		break;
 	case SYS_MUNMAP:
 		munmap(f->R.rdi);
+		break;
+	case SYS_CHDIR:
+		f->R.rax = chdir(f->R.rdi);
+		break;
+	case SYS_MKDIR:
+		f->R.rax = mkdir(f->R.rdi);
+		break;
+	case SYS_READDIR:
+		f->R.rax = readdir(f->R.rdi, f->R.rsi);
+		break;
+	case SYS_ISDIR:
+		f->R.rax = isdir(f->R.rdi);
+		break;
+	case SYS_INUMBER:
+		f->R.rax = inumber(f->R.rdi);
+		break;
+	case SYS_SYMLINK:
+		f->R.rax = symlink(f->R.rdi, f->R.rsi);
 		break;
 	default:
 		exit(-1);
@@ -215,11 +239,6 @@ int open(const char *file)
 	/* 파일을 open */
 	lock_acquire(&filesys_lock);
 	struct file *fileobj = filesys_open(file);
-	if (is_dir(fileobj))
-	{
-		// thread_current()->dir = "asdf";
-		return 0;
-	}
 
 	/* 해당 파일이 존재하지 않으면 -1 리턴 */
 	if (fileobj == NULL)
@@ -233,6 +252,10 @@ int open(const char *file)
 	if (fd == -1)
 	{
 		file_close(fileobj);
+	}
+	if (is_dir(fileobj) == 1)
+	{
+		// thread_current()->dir = "asdf";
 	}
 	/* 파일 디스크립터 리턴 */
 	lock_release(&filesys_lock);
@@ -402,4 +425,29 @@ void munmap(void *addr)
 {
 	check_address(addr);
 	do_munmap(addr);
+}
+
+bool mkdir(const char *dir)
+{
+	return dir_create(cluster_to_sector(fat_create_chain(0)), 2, dir);
+}
+
+bool chdir(const char *dir)
+{
+}
+
+bool readdir(int fd, char *name)
+{
+}
+
+bool isdir(int fd)
+{
+}
+
+int inumber(int fd)
+{
+}
+
+int symlink(const char *target, const char *linkpath)
+{
 }

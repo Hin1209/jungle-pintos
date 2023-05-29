@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <list.h>
+#include "threads/thread.h"
 #include "filesys/filesys.h"
 #include "filesys/inode.h"
 #include "filesys/fat.h"
@@ -24,9 +25,14 @@ struct dir_entry
 
 /* Creates a directory with space for ENTRY_CNT entries in the
  * given SECTOR.  Returns true if successful, false on failure. */
-bool dir_create(disk_sector_t sector, size_t entry_cnt)
+bool dir_create(disk_sector_t sector, size_t entry_cnt, const char *dir)
 {
-	return inode_create(sector, entry_cnt * sizeof(struct dir_entry), 1);
+	dir_add(thread_current()->dir, dir, sector);
+	bool success = inode_create(sector, entry_cnt * sizeof(struct dir_entry), 1);
+	struct dir *new_dir = dir_open(inode_open(sector));
+	dir_add(new_dir, ".", sector);
+	dir_add(new_dir, "..", inode_get_inumber(dir_get_inode(thread_current()->dir)));
+	return success;
 }
 
 /* Opens and returns the directory for the given INODE, of which
@@ -82,7 +88,7 @@ dir_get_inode(struct dir *dir)
 	return dir->inode;
 }
 
-bool init_root_dir(struct dir *root)
+void init_root_dir(struct dir *root)
 {
 	uint8_t *buf = calloc(1, DISK_SECTOR_SIZE);
 	struct dir_entry tmp;
@@ -92,8 +98,8 @@ bool init_root_dir(struct dir *root)
 	{
 		dir_add(root, ".", ROOT_DIR_SECTOR);
 		dir_add(root, "..", ROOT_DIR_SECTOR);
-		dir_close(root);
 	}
+	thread_current()->dir = root;
 }
 /* Searches DIR for a file with the given NAME.
  * If successful, returns true, sets *EP to the directory entry

@@ -17,9 +17,9 @@ struct inode_disk
 {
 	disk_sector_t start; /* First data sector. */
 	off_t length;		 /* File size in bytes. */
-	bool is_dir;
+	int is_dir;
 	unsigned magic;		  /* Magic number. */
-	uint32_t unused[125]; /* Not used. */
+	uint32_t unused[124]; /* Not used. */
 };
 
 /* Returns the number of sectors to allocate for an inode SIZE
@@ -79,7 +79,7 @@ void inode_init(void)
  * disk.
  * Returns true if successful.
  * Returns false if memory or disk allocation fails. */
-bool inode_create(disk_sector_t sector, off_t length, bool is_dir)
+bool inode_create(disk_sector_t sector, off_t length, int is_dir)
 {
 	struct inode_disk *disk_inode = NULL;
 	bool success = false;
@@ -94,7 +94,6 @@ bool inode_create(disk_sector_t sector, off_t length, bool is_dir)
 	{
 		size_t sectors = bytes_to_sectors(length);
 		size_t cluster_cnt = sectors / SECTORS_PER_CLUSTER;
-		// sectors = sector_to_cluster(sectors);
 		disk_inode->length = length;
 		disk_inode->magic = INODE_MAGIC;
 		disk_inode->start = cluster_to_sector(fat_create_chain(0));
@@ -207,6 +206,10 @@ void inode_close(struct inode *inode)
 	}
 }
 
+int is_inode_dir(struct inode *inode)
+{
+	return inode->data.is_dir;
+}
 /* Marks INODE to be deleted when it is closed by the last caller who
  * has it open. */
 void inode_remove(struct inode *inode)

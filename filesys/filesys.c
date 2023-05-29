@@ -8,6 +8,7 @@
 #include "filesys/directory.h"
 #include "devices/disk.h"
 #include "filesys/fat.h"
+#include "threads/thread.h"
 
 /* The disk that contains the file system. */
 struct disk *filesys_disk;
@@ -61,13 +62,13 @@ void filesys_done(void)
 bool filesys_create(const char *name, off_t initial_size)
 {
 	disk_sector_t inode_sector = 0;
-	struct dir *dir = dir_open_root();
+	struct dir *dir = thread_current()->dir;
 	inode_sector = cluster_to_sector(fat_create_chain(0));
 
 	bool success = (dir != NULL && inode_create(inode_sector, initial_size, 0) && dir_add(dir, name, inode_sector));
 	// if (!success && inode_sector != 0)
 	// 	free_map_release(inode_sector, 1);
-	dir_close(dir);
+	// dir_close(dir);
 
 	return success;
 }
